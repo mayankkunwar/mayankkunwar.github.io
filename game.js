@@ -2,264 +2,348 @@
   'use strict';
 
   const CV = window.CV;
-  const W = 960, H = 540, GROUND_Y = H - 64;
-  const START_W = 760, STAGE_W = 1000, END_W = 700;
-  const SPEED = 250, JUMP = 680;
-  const FONT = '"Press Start 2P", monospace';
+  const W = 1280, H = 720;                       // minimum visible world area
+  const SPACING = 1100, MARGIN = 700, WORLD_H = 2000;
+  const SPEED = 340, BOOST = 1.75;
+  const TAU = Math.PI * 2;
+  const FONT = 'Orbitron, "Inter", sans-serif';
   const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const ZOOM0 = Math.min((innerWidth * DPR) / W, (innerHeight * DPR) / H);
+  const S = Math.min(3, Math.max(2, Math.ceil(ZOOM0)));   // texture supersampling
+  const TEXT_RES = Math.min(3, Math.max(1, Math.ceil(ZOOM0)));
   const TYPES = {
-    education: { tex: 'school', icon: '🎓', label: 'Education' },
-    work: { tex: 'office', icon: '💼', label: 'Experience' },
-    project: { tex: 'lab', icon: '🔬', label: 'Research' },
-    toolkit: { tex: 'tools', icon: '🧰', label: 'Toolkit' },
+    education: { icon: '🎓', label: 'Education', kind: 'ringed' },
+    work: { icon: '💼', label: 'Experience', kind: 'gas' },
+    project: { icon: '🔬', label: 'Research', kind: 'moon' },
+    toolkit: { icon: '🧰', label: 'Toolkit', kind: 'station' },
   };
+  const PALETTE = ['#3b82f6', '#14b8a6', '#ef4444', '#f97316', '#a855f7', '#64748b', '#eab308'];
   const typeOf = (st) => TYPES[st.type] || TYPES.work;
 
   const $ = (s) => document.querySelector(s);
   const esc = (s = '') =>
     String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const font = (size, color = '#ffffff') => ({
-    fontFamily: FONT, fontSize: size + 'px', color, align: 'center', stroke: '#0f172a', strokeThickness: 4,
+  const font = (size, color = '#f8fafc') => ({
+    fontFamily: FONT, fontSize: size + 'px', fontStyle: '700', color, align: 'center',
+    stroke: '#020617', strokeThickness: Math.max(3, Math.round(size / 5)), resolution: TEXT_RES,
+    shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 8, fill: true },
   });
 
-  const touch = { left: false, right: false, jump: false, action: false };
+  const touch = { up: false, boost: false, action: false };
   const progress = { visited: new Set(), coins: 0, totalCoins: 0, skills: new Set() };
   let scene = null;
 
-  // ------------------------------------------------------------------
-  // Pixel art
-  // ------------------------------------------------------------------
-  const PLAYER_PAL = { H: '#3b2a1a', S: '#f1c27d', E: '#1a1a1a', T: '#2563eb', P: '#1f2937', B: '#111111' };
-  const BODY = [
-    '....HHHHH...',
-    '...HHHHHHH..',
-    '...HHSSSSS..',
-    '...HSSSESS..',
-    '...SSSSSSS..',
-    '....SSSSS...',
-    '...TTTTTTT..',
-    '..TTTTTTTTT.',
-    '..STTTTTTTS.',
-    '..STTTTTTTS.',
-    '....TTTTT...',
-  ];
-  const LEGS = {
-    idle: ['....PPPPP...', '....PP.PP...', '....PP.PP...', '....PP.PP...', '...BBB.BBB..'],
-    run: ['....PPPPP...', '...PP..PP...', '..PP....PP..', '..P......P..', '.BB......BB.'],
-    jump: ['....PPPPP...', '...PP..PP...', '...PP..PP...', '...BB..BB...', '............'],
-  };
-  const PLAYER_FRAMES = [BODY.concat(LEGS.idle), BODY.concat(LEGS.run), BODY.concat(LEGS.jump)];
-
-  function pixelTexture(sc, key, frames, pal, scale) {
-    const fw = frames[0][0].length * scale, fh = frames[0].length * scale;
-    const tex = sc.textures.createCanvas(key, fw * frames.length, fh);
-    const ctx = tex.getContext();
-    frames.forEach((rows, f) =>
-      rows.forEach((row, y) =>
-        [...row].forEach((c, x) => {
-          if (c === '.') return;
-          ctx.fillStyle = pal[c];
-          ctx.fillRect(f * fw + x * scale, y * scale, scale, scale);
-        })
-      )
-    );
-    frames.forEach((_, f) => tex.add(f, 0, f * fw, 0, fw, fh));
-    tex.refresh();
-  }
-
-  function gfxTexture(sc, key, w, h, draw) {
-    const g = sc.make.graphics({}, false);
-    draw(g);
-    g.generateTexture(key, w, h);
-    g.destroy();
-  }
-
-  let seed = 7;
+  let seed = 11;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rr = (a, b) => a + rnd() * (b - a);
+
+  // ------------------------------------------------------------------
+  // Procedural textures (drawn on canvas at S× for crisp scaling)
+  // ------------------------------------------------------------------
+  const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mix = (hex, amt, a = 1) => {
+    const t = amt < 0 ? 0 : 255, p = Math.abs(amt);
+    const [r, g, b] = rgb(hex).map((v) => Math.round(v + (t - v) * p));
+    return `rgba(${r},${g},${b},${a})`;
+  };
+  const hexNum = (hex) => parseInt(hex.slice(1), 16);
+
+  function canvasTex(sc, key, w, h, draw, scale = S) {
+    const t = sc.textures.createCanvas(key, Math.ceil(w * scale), Math.ceil(h * scale));
+    const ctx = t.getContext();
+    ctx.scale(scale, scale);
+    draw(ctx, w, h);
+    t.refresh();
+  }
+  const radial = (ctx, x, y, r0, r1, stops) => {
+    const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
+    stops.forEach(([o, c]) => g.addColorStop(o, c));
+    return g;
+  };
+  const circle = (ctx, x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); };
+
+  function planetTextures(sc, key, r, color, kind) {
+    const size = Math.ceil(r * (kind === 'ringed' ? 4 : 3.2)), c = size / 2;
+    const ring = (ctx, front) => {
+      ctx.save();
+      ctx.translate(c, c);
+      ctx.rotate(-0.38);
+      for (let k = 0; k < 6; k++) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * (1.42 + k * 0.09), r * (0.34 + k * 0.024), 0, front ? 0 : Math.PI, front ? Math.PI : TAU);
+        ctx.lineWidth = r * 0.075;
+        ctx.strokeStyle = mix(color, 0.55 - k * 0.1, 0.6 - k * 0.07);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    canvasTex(sc, key + '_base', size, size, (ctx) => {
+      ctx.fillStyle = radial(ctx, c, c, r * 0.8, r * 1.55, [[0, mix(color, 0.35, 0.55)], [0.4, mix(color, 0.2, 0.18)], [1, mix(color, 0, 0)]]);
+      circle(ctx, c, c, r * 1.55); ctx.fill();
+      if (kind === 'ringed') ring(ctx, false);
+      ctx.save();
+      circle(ctx, c, c, r); ctx.clip();
+      ctx.fillStyle = kind === 'moon' ? mix(color, 0.15) : color;
+      ctx.fillRect(c - r, c - r, 2 * r, 2 * r);
+      if (kind === 'moon') {
+        for (let k = 0; k < 9; k++) {
+          ctx.fillStyle = mix(color, rr(-0.2, 0.25), 0.35);
+          ctx.beginPath(); ctx.ellipse(c + rr(-r, r), c + rr(-r, r), rr(r * 0.2, r * 0.5), rr(r * 0.15, r * 0.35), rr(0, 3), 0, TAU); ctx.fill();
+        }
+        for (let k = 0; k < 22; k++) {
+          const x = c + rr(-r, r), y = c + rr(-r, r), cr = rr(r * 0.04, r * 0.17);
+          ctx.fillStyle = mix(color, -0.35, 0.55); circle(ctx, x, y, cr); ctx.fill();
+          ctx.fillStyle = mix(color, -0.55, 0.45); circle(ctx, x + cr * 0.15, y + cr * 0.15, cr * 0.75); ctx.fill();
+          ctx.strokeStyle = mix(color, 0.5, 0.45); ctx.lineWidth = cr * 0.18;
+          ctx.beginPath(); ctx.arc(x, y, cr, Math.PI * 0.9, Math.PI * 1.6); ctx.stroke();
+        }
+      } else {
+        const bands = kind === 'gas' ? 20 : 14;
+        for (let i = 0; i < bands; i++) {
+          const y = c - r + (i * 2 * r) / bands + rr(-4, 4), h = ((2 * r) / bands) * rr(0.6, 1.7);
+          const f = rr(0.015, 0.04), ph = rr(0, TAU), amp = rr(1.5, kind === 'gas' ? 7 : 3);
+          ctx.fillStyle = mix(color, rr(-0.38, 0.38), kind === 'gas' ? 0.55 : 0.35);
+          ctx.beginPath(); ctx.moveTo(c - r, y);
+          for (let x = -r; x <= r; x += 5) ctx.lineTo(c + x, y + Math.sin(x * f + ph) * amp);
+          for (let x = r; x >= -r; x -= 5) ctx.lineTo(c + x, y + h + Math.sin(x * f + ph + 0.7) * amp);
+          ctx.closePath(); ctx.fill();
+        }
+        if (kind === 'gas') {
+          const sx = c + r * 0.28, sy = c + r * 0.32;
+          ctx.fillStyle = mix(color, -0.4, 0.85); ctx.beginPath(); ctx.ellipse(sx, sy, r * 0.24, r * 0.12, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = mix(color, 0.3, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, r * 0.13, r * 0.06, 0, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.restore();
+    });
+
+    if (kind !== 'moon') {
+      canvasTex(sc, key + '_clouds', size, size, (ctx) => {
+        ctx.save(); circle(ctx, c, c, r); ctx.clip();
+        for (let k = 0; k < 26; k++) {
+          ctx.fillStyle = `rgba(255,255,255,${rr(0.05, 0.16)})`;
+          ctx.beginPath(); ctx.ellipse(c + rr(-r, r), c + rr(-r, r), rr(r * 0.15, r * 0.5), rr(r * 0.04, r * 0.12), rr(-0.3, 0.3), 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      });
+    }
+
+    canvasTex(sc, key + '_shade', size, size, (ctx) => {
+      ctx.save(); circle(ctx, c, c, r); ctx.clip();
+      ctx.fillStyle = radial(ctx, c - r * 0.45, c - r * 0.45, 0, r * 1.1, [[0, 'rgba(255,255,255,0.32)'], [1, 'rgba(255,255,255,0)']]);
+      ctx.fillRect(c - r, c - r, 2 * r, 2 * r);
+      ctx.fillStyle = radial(ctx, c - r * 0.32, c - r * 0.36, r * 0.45, r * 1.8,
+        [[0, 'rgba(2,6,23,0)'], [0.5, 'rgba(2,6,23,0.3)'], [0.8, 'rgba(2,6,23,0.85)'], [1, 'rgba(2,6,23,0.95)']]);
+      ctx.fillRect(c - r, c - r, 2 * r, 2 * r);
+      ctx.restore();
+      ctx.strokeStyle = mix(color, 0.65, 0.75); ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(c, c, r - 1.2, Math.PI * 0.92, Math.PI * 1.72); ctx.stroke();
+      if (kind === 'ringed') ring(ctx, true);
+    });
+    return size;
+  }
+
+  function stationTexture(sc, key, color) {
+    const size = 300, c = size / 2;
+    canvasTex(sc, key, size, size, (ctx) => {
+      ctx.fillStyle = radial(ctx, c, c, 40, 150, [[0, mix(color, 0.3, 0.35)], [1, mix(color, 0, 0)]]);
+      circle(ctx, c, c, 150); ctx.fill();
+      // truss + solar panels
+      ctx.fillStyle = '#64748b'; ctx.fillRect(c - 140, c - 4, 280, 8);
+      [-1, 1].forEach((side) => {
+        const x0 = side < 0 ? c - 142 : c + 82;
+        const g = ctx.createLinearGradient(x0, c - 30, x0 + 60, c + 30);
+        g.addColorStop(0, '#1e3a8a'); g.addColorStop(0.5, '#2563eb'); g.addColorStop(1, '#172554');
+        ctx.fillStyle = g; ctx.fillRect(x0, c - 30, 60, 60);
+        ctx.strokeStyle = 'rgba(147,197,253,0.6)'; ctx.lineWidth = 1;
+        for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x0 + k * 15, c - 30); ctx.lineTo(x0 + k * 15, c + 30); ctx.stroke(); }
+        for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x0, c - 30 + k * 15); ctx.lineTo(x0 + 60, c - 30 + k * 15); ctx.stroke(); }
+        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.strokeRect(x0, c - 30, 60, 60);
+      });
+      // spokes
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 4;
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2 + Math.PI / 4;
+        ctx.beginPath(); ctx.moveTo(c, c); ctx.lineTo(c + Math.cos(a) * 66, c + Math.sin(a) * 66); ctx.stroke();
+      }
+      // habitat ring
+      const rg = ctx.createLinearGradient(c - 70, c - 70, c + 70, c + 70);
+      rg.addColorStop(0, '#f1f5f9'); rg.addColorStop(0.5, '#94a3b8'); rg.addColorStop(1, '#334155');
+      ctx.strokeStyle = rg; ctx.lineWidth = 20; circle(ctx, c, c, 68); ctx.stroke();
+      ctx.strokeStyle = mix(color, 0.1, 0.9); ctx.lineWidth = 3; circle(ctx, c, c, 68); ctx.stroke();
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * TAU;
+        ctx.fillStyle = k % 3 ? '#fde68a' : '#67e8f9';
+        circle(ctx, c + Math.cos(a) * 68, c + Math.sin(a) * 68, 2.2); ctx.fill();
+      }
+      // hub
+      ctx.fillStyle = radial(ctx, c - 9, c - 9, 2, 32, [[0, '#ffffff'], [0.35, '#cbd5e1'], [1, '#334155']]);
+      circle(ctx, c, c, 30); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 4; circle(ctx, c, c, 20); ctx.stroke();
+    });
+  }
 
   function makeTextures(sc) {
-    pixelTexture(sc, 'player', PLAYER_FRAMES, PLAYER_PAL, 3);
-
-    gfxTexture(sc, 'ground', 32, 64, (g) => {
-      g.fillStyle(0x8b5a2b).fillRect(0, 0, 32, 64);
-      g.fillStyle(0x6f4520).fillRect(4, 16, 4, 4).fillRect(20, 23, 4, 4).fillRect(13, 27, 3, 3).fillRect(8, 40, 4, 4).fillRect(24, 50, 3, 3);
-      g.fillStyle(0x4ade80).fillRect(0, 0, 32, 9);
-      g.fillStyle(0x22c55e).fillRect(0, 8, 32, 3).fillRect(5, 11, 3, 2).fillRect(19, 11, 3, 3);
+    canvasTex(sc, 'ship', 64, 40, (ctx) => {
+      const wing = (dir) => {
+        const g = ctx.createLinearGradient(0, 20, 0, 20 + dir * 18);
+        g.addColorStop(0, '#1d4ed8'); g.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(34, 20); ctx.lineTo(8, 20 + dir * 19); ctx.lineTo(19, 20 + dir * 19); ctx.lineTo(44, 20 + dir * 4); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(14, 20 + dir * 17); ctx.lineTo(30, 20 + dir * 8); ctx.stroke();
+      };
+      wing(-1); wing(1);
+      const hull = ctx.createLinearGradient(0, 11, 0, 29);
+      hull.addColorStop(0, '#ffffff'); hull.addColorStop(0.55, '#cbd5e1'); hull.addColorStop(1, '#475569');
+      ctx.fillStyle = hull;
+      ctx.beginPath(); ctx.moveTo(63, 20); ctx.quadraticCurveTo(52, 10, 26, 12); ctx.lineTo(12, 15); ctx.lineTo(12, 25);
+      ctx.lineTo(26, 28); ctx.quadraticCurveTo(52, 30, 63, 20); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(18, 20); ctx.lineTo(36, 20); ctx.stroke();
+      const glass = ctx.createLinearGradient(40, 15, 40, 25);
+      glass.addColorStop(0, '#a5f3fc'); glass.addColorStop(1, '#0e7490');
+      ctx.fillStyle = glass; ctx.beginPath(); ctx.ellipse(45, 20, 8.5, 4.6, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.ellipse(46.5, 18, 3.2, 1.3, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#334155'; ctx.fillRect(8, 15.5, 6, 9);
+      ctx.fillStyle = '#fde68a'; ctx.fillRect(7, 17.5, 2, 5);
     });
-    gfxTexture(sc, 'platform', 32, 16, (g) => {
-      g.fillStyle(0xa16207).fillRect(0, 0, 32, 16);
-      g.fillStyle(0xca8a04).fillRect(0, 0, 32, 4);
-      g.fillStyle(0x713f12).fillRect(0, 13, 32, 3).fillRect(15, 4, 2, 9);
+    canvasTex(sc, 'flame', 70, 24, (ctx) => {
+      const g = ctx.createLinearGradient(70, 0, 0, 0);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.15, 'rgba(253,230,138,0.95)');
+      g.addColorStop(0.45, 'rgba(249,115,22,0.7)'); g.addColorStop(1, 'rgba(239,68,68,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(35, 12, 35, 7, 0, 0, TAU); ctx.fill();
     });
-    gfxTexture(sc, 'coin', 20, 20, (g) => {
-      g.fillStyle(0xb45309).fillCircle(10, 10, 10);
-      g.fillStyle(0xfacc15).fillCircle(10, 10, 8);
-      g.fillStyle(0xeab308).fillRect(9, 5, 3, 10);
-      g.fillStyle(0xfef9c3).fillRect(5, 5, 2, 5);
+    canvasTex(sc, 'crystal', 48, 48, (ctx) => {
+      ctx.fillStyle = radial(ctx, 24, 24, 2, 24, [[0, 'rgba(103,232,249,0.55)'], [1, 'rgba(103,232,249,0)']]);
+      circle(ctx, 24, 24, 24); ctx.fill();
+      const g = ctx.createLinearGradient(14, 8, 34, 40);
+      g.addColorStop(0, '#fef9c3'); g.addColorStop(0.5, '#facc15'); g.addColorStop(1, '#b45309');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(24, 7); ctx.lineTo(35, 22); ctx.lineTo(24, 41); ctx.lineTo(13, 22); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(13, 22); ctx.lineTo(35, 22); ctx.moveTo(24, 7); ctx.lineTo(20, 22); ctx.lineTo(24, 41); ctx.stroke();
     });
-    gfxTexture(sc, 'spark', 6, 6, (g) => g.fillStyle(0xffffff).fillRect(0, 0, 6, 6));
-    gfxTexture(sc, 'post', 14, 64, (g) => {
-      g.fillStyle(0x713f12).fillRect(5, 10, 4, 54);
-      g.fillStyle(0xa16207).fillRect(0, 0, 14, 12);
+    canvasTex(sc, 'dot', 16, 16, (ctx) => {
+      ctx.fillStyle = radial(ctx, 8, 8, 0, 8, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,255,0.6)'], [1, 'rgba(255,255,255,0)']]);
+      ctx.fillRect(0, 0, 16, 16);
     });
-
-    gfxTexture(sc, 'school', 200, 180, (g) => {
-      g.fillStyle(0xb45309).fillRect(20, 70, 160, 110);
-      g.fillStyle(0x9a3412);
-      for (let y = 80; y < 180; y += 12) g.fillRect(20, y, 160, 2);
-      g.fillStyle(0x7f1d1d).fillTriangle(5, 75, 100, 18, 195, 75);
-      g.fillStyle(0xfef3c7).fillCircle(100, 54, 12);
-      g.fillStyle(0x1f2937).fillRect(99, 45, 2, 10).fillRect(99, 53, 7, 2);
-      g.fillStyle(0xe5e7eb).fillRect(98, 0, 3, 20);
-      g.fillStyle(0x2563eb).fillRect(101, 1, 18, 11);
-      g.fillStyle(0xbfdbfe).fillRect(38, 92, 30, 26).fillRect(132, 92, 30, 26).fillRect(38, 136, 30, 26).fillRect(132, 136, 30, 26);
-      g.fillStyle(0x451a03).fillRect(82, 122, 36, 58);
-      g.fillStyle(0xfacc15).fillRect(110, 150, 4, 4);
+    canvasTex(sc, 'streak', 220, 6, (ctx) => {
+      const g = ctx.createLinearGradient(0, 0, 220, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,0.95)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(110, 3, 110, 1.6, 0, 0, TAU); ctx.fill();
     });
-
-    gfxTexture(sc, 'office', 170, 260, (g) => {
-      g.fillStyle(0x1e293b).fillRect(10, 20, 150, 240);
-      g.fillStyle(0x334155).fillRect(0, 12, 170, 12);
-      g.fillStyle(0x94a3b8).fillRect(82, 0, 4, 12);
-      g.fillStyle(0xef4444).fillRect(80, 0, 8, 4);
-      for (let y = 36; y < 210; y += 30)
-        for (let c = 0; c < 4; c++) {
-          const r = rnd();
-          g.fillStyle(r < 0.45 ? 0xfde68a : r < 0.75 ? 0x7dd3fc : 0x475569).fillRect(22 + c * 35, y, 24, 18);
-        }
-      g.fillStyle(0x0f172a).fillRect(60, 214, 50, 46);
-      g.fillStyle(0x38bdf8).fillRect(64, 218, 20, 42).fillRect(86, 218, 20, 42);
+    canvasTex(sc, 'sun', 320, 320, (ctx) => {
+      ctx.fillStyle = radial(ctx, 160, 160, 0, 160, [[0, '#ffffff'], [0.18, '#fef9c3'], [0.32, '#fbbf24'], [0.45, 'rgba(245,158,11,0.55)'], [1, 'rgba(245,158,11,0)']]);
+      ctx.fillRect(0, 0, 320, 320);
     });
-
-    gfxTexture(sc, 'lab', 200, 150, (g) => {
-      g.fillStyle(0x0f766e).fillRect(10, 50, 180, 100);
-      g.fillStyle(0x134e4a).fillRect(0, 40, 200, 14);
-      g.fillStyle(0x99f6e4).fillRect(28, 78, 84, 72);
-      g.fillStyle(0x5eead4);
-      for (let y = 88; y < 150; y += 12) g.fillRect(28, y, 84, 3);
-      g.fillStyle(0xfde68a).fillRect(130, 78, 44, 32);
-      g.fillStyle(0x713f12).fillRect(150, 22, 4, 18);
-      g.fillStyle(0xfacc15).fillCircle(152, 20, 15);
-      g.fillStyle(0x134e4a).fillCircle(152, 20, 6);
-    });
-
-    gfxTexture(sc, 'tools', 200, 170, (g) => {
-      g.fillStyle(0x6d28d9).fillRect(14, 60, 172, 110);
-      g.fillStyle(0x4c1d95).fillTriangle(0, 66, 100, 20, 200, 66);
-      g.fillStyle(0x5b21b6);
-      for (let x = 14; x < 186; x += 16) g.fillRect(x, 66, 3, 104);
-      g.fillStyle(0x1e1b4b).fillRect(76, 110, 48, 60);
-      g.fillStyle(0xfde68a).fillRect(30, 90, 30, 24).fillRect(140, 90, 30, 24);
-      g.fillStyle(0xcbd5e1).fillRect(92, 0, 12, 40).fillCircle(98, 6, 12);
-      g.fillStyle(0x4c1d95).fillRect(94, -6, 8, 12);
-    });
-
-    gfxTexture(sc, 'goal', 260, 240, (g) => {
-      g.fillStyle(0x94a3b8).fillRect(30, 80, 200, 160);
-      g.fillStyle(0x64748b).fillRect(0, 40, 60, 200).fillRect(200, 40, 60, 200);
-      g.fillStyle(0x64748b);
-      for (let x = 30; x < 230; x += 20) g.fillRect(x, 68, 12, 12);
-      [0, 23, 46, 200, 223, 246].forEach((x) => g.fillRect(x, 28, 14, 12));
-      g.fillStyle(0x1e293b).fillRect(100, 170, 60, 70).fillCircle(130, 170, 30);
-      g.fillStyle(0xfde68a).fillRect(22, 90, 16, 24).fillRect(222, 90, 16, 24).fillRect(70, 110, 16, 24).fillRect(174, 110, 16, 24);
-      g.fillStyle(0xe5e7eb).fillRect(128, 10, 4, 70);
-      g.fillStyle(0xfacc15).fillTriangle(132, 10, 172, 22, 132, 34);
-    });
-  }
-
-  function drawBackground(sc, worldW) {
-    const sky = sc.add.graphics().setScrollFactor(0).setDepth(-10);
-    sky.fillGradientStyle(0x60a5fa, 0x60a5fa, 0xdbeafe, 0xdbeafe, 1).fillRect(0, 0, W, H);
-    sky.fillStyle(0xfef08a).fillCircle(800, 110, 40);
-
-    const layer = (factor, depth, draw) => {
-      const g = sc.add.graphics().setScrollFactor(factor, 1).setDepth(depth);
-      draw(g, W + (worldW - W) * factor + 200);
-    };
-    layer(0.12, -9, (g, w) => {
-      g.fillStyle(0x93a8d6);
-      g.beginPath().moveTo(0, GROUND_Y);
-      for (let x = 0; x <= w; x += 140) g.lineTo(x, GROUND_Y - 170 - rnd() * 130).lineTo(x + 70, GROUND_Y - 90 - rnd() * 60);
-      g.lineTo(w, GROUND_Y).closePath().fillPath();
-    });
-    layer(0.3, -8, (g, w) => {
-      g.fillStyle(0xffffff, 0.9);
-      for (let x = 80; x < w; x += 260 + rnd() * 200) {
-        const y = 70 + rnd() * 110;
-        g.fillCircle(x, y, 22).fillCircle(x + 26, y - 10, 28).fillCircle(x + 56, y, 22).fillRect(x, y, 56, 22);
+    canvasTex(sc, 'rays', 400, 400, (ctx) => {
+      ctx.translate(200, 200);
+      for (let k = 0; k < 28; k++) {
+        ctx.rotate(TAU / 28);
+        const len = k % 2 ? 190 : 140;
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, 'rgba(253,230,138,0.6)'); g.addColorStop(1, 'rgba(253,230,138,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(len, 0); ctx.lineTo(0, 5); ctx.fill();
       }
     });
-    layer(0.5, -7, (g, w) => {
-      g.fillStyle(0x4d9b6a);
-      for (let x = 0; x < w; x += 150) g.fillCircle(x, GROUND_Y + 40, 90 + rnd() * 70);
+    for (let k = 0; k < 4; k++) {
+      canvasTex(sc, 'rock' + k, 56, 56, (ctx) => {
+        ctx.beginPath();
+        const n = 11;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU, d = rr(17, 26);
+          i ? ctx.lineTo(28 + Math.cos(a) * d, 28 + Math.sin(a) * d) : ctx.moveTo(28 + Math.cos(a) * d, 28 + Math.sin(a) * d);
+        }
+        ctx.closePath();
+        ctx.fillStyle = radial(ctx, 20, 20, 2, 34, [[0, '#a8a29e'], [0.6, '#57534e'], [1, '#1c1917']]);
+        ctx.fill();
+        ctx.save(); ctx.clip();
+        for (let i = 0; i < 5; i++) { ctx.fillStyle = 'rgba(28,25,23,0.55)'; circle(ctx, rr(14, 42), rr(14, 42), rr(2, 5)); ctx.fill(); }
+        ctx.restore();
+      });
+    }
+    // Star layers (1×, tiled)
+    [[260, 0.5, 1.1], [130, 0.8, 1.6], [45, 1.2, 2.3]].forEach(([count, rMin, rMax], L) => {
+      canvasTex(sc, 'stars' + L, 512, 512, (ctx) => {
+        for (let k = 0; k < count; k++) {
+          const x = rr(0, 512), y = rr(0, 512), r = rr(rMin, rMax);
+          const col = ['255,255,255', '191,219,254', '254,240,138', '252,165,165'][Math.floor(rr(0, 4))];
+          if (L) { ctx.fillStyle = radial(ctx, x, y, 0, r * 3, [[0, `rgba(${col},0.35)`], [1, `rgba(${col},0)`]]); circle(ctx, x, y, r * 3); ctx.fill(); }
+          ctx.fillStyle = `rgba(${col},${rr(0.5, 1)})`; circle(ctx, x, y, r); ctx.fill();
+        }
+      }, 1);
     });
+    canvasTex(sc, 'nebula', 256, 256, (ctx) => {
+      for (let k = 0; k < 7; k++) {   // blobs stay inside the square so the scaled image has no hard edges
+        const x = rr(98, 158), y = rr(98, 158), r = rr(45, 92);
+        ctx.fillStyle = radial(ctx, x, y, 0, r, [[0, 'rgba(255,255,255,0.4)'], [0.5, 'rgba(255,255,255,0.15)'], [1, 'rgba(255,255,255,0)']]);
+        ctx.fillRect(0, 0, 256, 256);
+      }
+    }, 1);
   }
 
   // ------------------------------------------------------------------
   // Scene
   // ------------------------------------------------------------------
-  class Level extends Phaser.Scene {
-    constructor() { super('level'); }
+  class Space extends Phaser.Scene {
+    constructor() { super('space'); }
 
     create() {
       scene = this;
       makeTextures(this);
-      const stages = CV.stages || [];
-      this.worldW = START_W + stages.length * STAGE_W + END_W;
-      this.physics.world.setBounds(0, 0, this.worldW, H + 200);
-      this.cameras.main.setBounds(0, 0, this.worldW, H);
-      drawBackground(this, this.worldW);
+      const stages = CV.stages || [], n = stages.length;
+      this.worldW = MARGIN * 2 + n * SPACING;
+      const cam = this.cameras.main;
+      this.physics.world.setBounds(0, 0, this.worldW, WORLD_H);
+      cam.setBounds(0, 0, this.worldW, WORLD_H);
+      this.fit();
+      this.scale.on('resize', () => this.fit());
 
-      this.solids = [];
+      const yAt = (i) => WORLD_H / 2 + Math.sin(i * 1.3 + 0.6) * 420;
+      this.start = new Phaser.Math.Vector2(MARGIN - 420, WORLD_H / 2);
+      this.drawSpace();
+
       this.coins = [];
-      this.buildings = [];
+      this.buildings = stages.map((st, i) => this.buildPlanet(st, i, MARGIN + i * SPACING, yAt(i)));
+      this.buildGoal(MARGIN + n * SPACING, yAt(n));
+      this.drawRoute();
+      this.scatterAsteroids();
 
-      const ground = this.add.tileSprite(this.worldW / 2, GROUND_Y + 32, this.worldW, 64, 'ground');
-      this.physics.add.existing(ground, true);
-      this.solids.push(ground);
+      this.add.text(this.start.x + 40, this.start.y - 170, `${CV.name}`, font(30, '#fde68a')).setOrigin(0.5).setDepth(6);
+      this.add.text(this.start.x + 40, this.start.y - 125, `${CV.title}\nFollow the route  >>>`, font(15, '#a5f3fc'))
+        .setOrigin(0.5).setLineSpacing(8).setDepth(6);
 
-      // Welcome sign
-      this.add
-        .text(380, 120, `Hi, I'm ${CV.name}!\n\n${CV.title}\n\nWalk right to explore\nmy journey  >>>`, font(14))
-        .setOrigin(0.5, 0)
-        .setLineSpacing(6)
-        .setBackgroundColor('#0f172acc')
-        .setPadding(18, 16);
+      // Ship
+      this.ship = this.physics.add.image(this.start.x, this.start.y, 'ship').setScale(1 / S).setDepth(10);
+      this.ship.setCollideWorldBounds(true);
+      this.vel = new Phaser.Math.Vector2();
+      this.flame = this.add.image(0, 0, 'flame').setOrigin(1, 0.5).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+      this.trail = this.add.particles(0, 0, 'dot', {
+        lifespan: 650, speed: { min: 20, max: 70 }, frequency: 14,
+        angle: { onEmit: () => Phaser.Math.RadToDeg(this.ship.rotation) + 180 + Phaser.Math.Between(-14, 14) },
+        scale: { start: 0.9 / S * 2, end: 0 }, alpha: { start: 0.8, end: 0 },
+        tint: [0xfbbf24, 0xf97316, 0x60a5fa], blendMode: 'ADD', emitting: false,
+      }).setDepth(8);
+      cam.startFollow(this.ship, false, 0.08, 0.08);
 
-      stages.forEach((st, i) => this.buildStage(st, i, START_W + i * STAGE_W));
+      this.burst = this.add.particles(0, 0, 'dot', {
+        lifespan: 800, speed: { min: 80, max: 280 }, scale: { start: 1.2, end: 0 }, alpha: { start: 1, end: 0 },
+        tint: [0xfacc15, 0x67e8f9, 0xffffff], blendMode: 'ADD', emitting: false,
+      }).setDepth(11);
+      this.fireworks = this.add.particles(0, 0, 'dot', {
+        lifespan: 1500, speed: { min: 120, max: 460 }, gravityY: 90, scale: { start: 1.4, end: 0 }, alpha: { start: 1, end: 0 },
+        tint: [0xfacc15, 0xf472b6, 0x22d3ee, 0xa78bfa, 0x4ade80], blendMode: 'ADD', emitting: false,
+      }).setDepth(11);
 
-      // Goal
-      const gx = START_W + stages.length * STAGE_W + 360;
-      const goal = this.add.image(gx, GROUND_Y, 'goal').setOrigin(0.5, 1).setDepth(1).setInteractive({ useHandCursor: true });
-      goal.on('pointerdown', () => this.openGoal());
-      this.add.text(gx, GROUND_Y - goal.height - 14, "LET'S TALK!", font(14, '#facc15')).setOrigin(0.5, 1);
-      this.goal = { x: gx, half: goal.width / 2, img: goal };
+      this.prompt = this.add.text(0, 0, '', font(15, '#fde68a')).setOrigin(0.5).setDepth(12).setVisible(false);
+      this.tweens.add({ targets: this.prompt, alpha: 0.55, duration: 550, yoyo: true, repeat: -1 });
 
-      // Player
-      this.player = this.physics.add.sprite(140, GROUND_Y - 60, 'player', 0).setDepth(5);
-      this.player.body.setSize(24, 46).setOffset(6, 2);
-      this.player.setCollideWorldBounds(true);
-      this.physics.add.collider(this.player, this.solids);
-      this.anims.create({ key: 'run', frames: [{ key: 'player', frame: 1 }, { key: 'player', frame: 0 }], frameRate: 9, repeat: -1 });
-
-      this.cameras.main.startFollow(this.player, true, 0.12, 0.12).setFollowOffset(-140, 0);
-
-      this.prompt = this.add.text(0, 0, '', font(10, '#facc15')).setOrigin(0.5).setDepth(6).setVisible(false);
-      this.tweens.add({ targets: this.prompt, scale: 1.12, duration: 450, yoyo: true, repeat: -1 });
-
-      this.coinFx = this.add.particles(0, 0, 'spark', {
-        speed: { min: 60, max: 200 }, lifespan: 500, gravityY: 300, scale: { start: 1, end: 0 },
-        tint: [0xfacc15, 0xfde68a, 0xffffff], emitting: false,
-      }).setDepth(7);
-      this.confetti = this.add.particles(0, 0, 'spark', {
-        speed: { min: 200, max: 520 }, angle: { min: 210, max: 330 }, lifespan: 1800, gravityY: 500,
-        rotate: { min: 0, max: 360 }, scale: { start: 1.6, end: 0.4 },
-        tint: [0xfacc15, 0xef4444, 0x22c55e, 0x3b82f6, 0xa855f7], emitting: false,
-      }).setDepth(7);
+      this.time.addEvent({ delay: 2200, loop: true, callback: () => Math.random() < 0.6 && this.shootingStar() });
 
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.keys = this.input.keyboard.addKeys('W,A,D,E,ENTER');
-      this.lastGround = this.jumpBuffer = -1e9;
+      this.keys = this.input.keyboard.addKeys('W,A,S,D,E,ENTER,SHIFT');
       this.cooldown = 0;
 
       progress.totalCoins = this.coins.length;
@@ -268,107 +352,200 @@
       UI.init(this);
     }
 
-    buildStage(st, i, x0) {
-      const meta = typeOf(st);
-      const year = String(st.period || '').split(/[–—-]/)[0].trim();
-      if (year) this.add.image(x0 + 20, GROUND_Y, 'post').setOrigin(0.5, 1);
-      if (year) this.add.text(x0 + 20, GROUND_Y - 74, year, font(10)).setOrigin(0.5, 1);
-
-      this.platform(x0 + 190, GROUND_Y - 115, 176);
-      this.platform(x0 + 390, GROUND_Y - 215, 176);
-
-      const b = this.add.image(x0 + 690, GROUND_Y, meta.tex).setOrigin(0.5, 1).setDepth(1).setInteractive({ useHandCursor: true });
-      b.on('pointerdown', () => this.openStage(i));
-      this.add
-        .text(b.x, GROUND_Y - b.height - 14, [st.org, st.period].filter(Boolean).join('\n'), { ...font(10), wordWrap: { width: 260 } })
-        .setOrigin(0.5, 1)
-        .setLineSpacing(6)
-        .setBackgroundColor('#0f172acc')
-        .setPadding(10, 8);
-      this.buildings.push({ x: b.x, half: b.width / 2, idx: i, img: b });
-
-      // Ordered so neighbouring coins alternate label heights; extra skills fall back to a ground row
-      const G = GROUND_Y - 40, P1 = GROUND_Y - 150, P2 = GROUND_Y - 250;
-      const slots = [
-        [x0 + 70, G], [x0 + 120, P1], [x0 + 190, P1], [x0 + 260, P1], [x0 + 320, P2], [x0 + 390, P2], [x0 + 460, P2],
-        [x0 + 500, G], [x0 + 560, G], [x0 + 290, GROUND_Y - 80], [x0 + 420, GROUND_Y - 90], [x0 + 615, G],
-      ];
-      (st.skills || []).forEach((name, k) => {
-        const [cx, cy] = slots[k] || [x0 + 675 + (k - slots.length) * 60, G];
-        const img = this.add.image(cx, cy, 'coin').setDepth(4);
-        const label = this.add.text(cx, cy - (k % 2 ? 46 : 20), name, font(7)).setOrigin(0.5, 1).setDepth(4);
-        this.tweens.add({ targets: [img, label], y: '-=7', duration: 700 + rnd() * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-        this.coins.push({ img, label, name, taken: false });
-      });
+    fit() {
+      const cam = this.cameras.main, w = this.scale.width, h = this.scale.height;
+      cam.setSize(w, h);
+      cam.setZoom(Math.min(w / (h > w ? 760 : W), h / H));   // portrait phones: show a narrower slice, closer up
+      (this.starLayers || []).forEach(({ ts }) => ts.setPosition(w / 2, h / 2).setSize(w / cam.zoom + 8, h / cam.zoom + 8));
     }
 
-    platform(x, y, w) {
-      const p = this.add.tileSprite(x, y, w, 16, 'platform');
-      this.physics.add.existing(p, true);
-      Object.assign(p.body.checkCollision, { down: false, left: false, right: false });
-      this.solids.push(p);
+    drawSpace() {
+      // Screen-sized star layers scrolled by hand: world-sized tile sprites exceed GPU texture limits
+      this.starLayers = [0.1, 0.3, 0.6].map((f, L) => ({
+        f, ts: this.add.tileSprite(0, 0, 8, 8, 'stars' + L).setScrollFactor(0).setDepth(-10 + L),
+      }));
+      this.fit();
+      const tints = [0x7c3aed, 0x2563eb, 0xdb2777, 0x0891b2, 0x4f46e5];
+      for (let k = 0; k < 10; k++) {
+        this.add.image(rr(-400, this.worldW * 0.2 + 1200), rr(-200, WORLD_H * 0.2 + 700), 'nebula')
+          .setScrollFactor(0.2).setDepth(-11).setScale(rr(5, 10)).setRotation(rr(0, TAU))
+          .setTint(tints[k % tints.length]).setAlpha(rr(0.14, 0.24)).setBlendMode(Phaser.BlendModes.ADD);
+      }
+      for (let k = 0; k < 70; k++) {
+        const s = this.add.image(rr(-300, this.worldW * 0.6 + 1500), rr(-300, WORLD_H * 0.6 + 900), 'dot')
+          .setScrollFactor(0.6).setDepth(-7).setScale(rr(0.25, 0.6)).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: s, alpha: 0.15, duration: rr(700, 2200), yoyo: true, repeat: -1, delay: rr(0, 2000) });
+      }
+    }
+
+    buildPlanet(st, i, x, y) {
+      const meta = typeOf(st), color = st.color || PALETTE[i % PALETTE.length], kind = meta.kind;
+      let r, top, landR, orbitR;
+      if (kind === 'station') {
+        stationTexture(this, 'p' + i, color);
+        const img = this.add.image(x, y, 'p' + i).setScale(1 / S).setDepth(3);
+        this.tweens.add({ targets: img, angle: 360, duration: 70000, repeat: -1 });
+        r = 90; top = 120; landR = 170; orbitR = 230;
+      } else {
+        r = { gas: 125, ringed: 95, moon: 78 }[kind];
+        planetTextures(this, 'p' + i, r, color, kind);
+        this.add.image(x, y, 'p' + i + '_base').setScale(1 / S).setDepth(2);
+        if (kind !== 'moon') {
+          const clouds = this.add.image(x, y, 'p' + i + '_clouds').setScale(1 / S).setDepth(3);
+          this.tweens.add({ targets: clouds, angle: i % 2 ? 360 : -360, duration: 90000, repeat: -1 });
+        }
+        this.add.image(x, y, 'p' + i + '_shade').setScale(1 / S).setDepth(4);
+        top = r + 22;
+        landR = (kind === 'ringed' ? r * 1.6 : r) + 70;
+        orbitR = (kind === 'ringed' ? r * 1.85 : r) + 85;
+      }
+
+      const halo = this.add.circle(x, y, landR, 0x22d3ee, 0.04).setStrokeStyle(2, 0x67e8f9, 0.7).setDepth(1).setAlpha(0);
+      this.tweens.add({ targets: halo, scale: 1.04, duration: 900, yoyo: true, repeat: -1 });
+      this.add.text(x, y - top - (st.period ? 22 : 0), st.org, { ...font(22), wordWrap: { width: 420 } }).setOrigin(0.5, 1).setDepth(6);
+      if (st.period) this.add.text(x, y - top, st.period, font(14, '#67e8f9')).setOrigin(0.5, 1).setDepth(6);
+
+      const skills = st.skills || [];
+      const two = skills.length > 6;
+      const g = this.add.graphics().setDepth(1);
+      g.lineStyle(1.5, 0x67e8f9, 0.16).strokeCircle(x, y, orbitR);
+      if (two) g.strokeCircle(x, y, orbitR + 60);
+      const dir = i % 2 ? 1 : -1;
+      skills.forEach((name, k) => {
+        const img = this.add.image(x, y, 'crystal').setScale(1 / S).setDepth(5);
+        this.tweens.add({ targets: img, scale: 1.25 / S, duration: 650, yoyo: true, repeat: -1, delay: k * 90 });
+        const label = this.add.text(x, y, name, font(12, '#e0f2fe')).setOrigin(0.5, 1).setDepth(5);
+        this.coins.push({ img, label, name, cx: x, cy: y, rad: orbitR + (two && k % 2 ? 60 : 0), a: (k / skills.length) * TAU, w: dir * 0.16, taken: false });
+      });
+      return { x, y, r, landR, idx: i, halo };
+    }
+
+    buildGoal(x, y) {
+      const rays = this.add.image(x, y, 'rays').setScale(1.3 / S).setDepth(2).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: rays, angle: 360, duration: 40000, repeat: -1 });
+      const sun = this.add.image(x, y, 'sun').setScale(1 / S).setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: sun, scale: 1.12 / S, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.add.text(x, y - 170, "LET'S TALK!", font(28, '#fde68a')).setOrigin(0.5, 1).setDepth(6);
+      this.add.text(x, y + 170, 'Contact beacon', font(15, '#67e8f9')).setOrigin(0.5, 0).setDepth(6);
+      const halo = this.add.circle(x, y, 200, 0xfbbf24, 0.04).setStrokeStyle(2, 0xfde68a, 0.7).setDepth(1).setAlpha(0);
+      this.goal = { x, y, landR: 200, halo };
+    }
+
+    drawRoute() {
+      const pts = [this.start, ...this.buildings.map((b) => new Phaser.Math.Vector2(b.x, b.y)), new Phaser.Math.Vector2(this.goal.x, this.goal.y)];
+      const curve = new Phaser.Curves.Spline(pts);
+      const g = this.add.graphics().setDepth(0);
+      const dots = curve.getSpacedPoints(Math.floor(curve.getLength() / 26));
+      dots.forEach((p, k) => g.fillStyle(0x67e8f9, k % 4 ? 0.22 : 0.5).fillCircle(p.x, p.y, k % 4 ? 2 : 3));
+    }
+
+    scatterAsteroids() {
+      const avoid = [...this.buildings, this.goal, { x: this.start.x, y: this.start.y }];
+      for (let k = 0, placed = 0; k < 400 && placed < 46; k++) {
+        const x = rr(150, this.worldW - 150), y = rr(120, WORLD_H - 120);
+        if (avoid.some((b) => Phaser.Math.Distance.Between(x, y, b.x, b.y) < 420)) continue;
+        const a = this.add.image(x, y, 'rock' + (placed % 4)).setScale(rr(0.5, 1.5) / S).setDepth(1).setRotation(rr(0, TAU));
+        this.tweens.add({ targets: a, angle: a.angle + (placed % 2 ? 360 : -360), duration: rr(20000, 60000), repeat: -1 });
+        this.tweens.add({ targets: a, y: y + rr(-30, 30), x: x + rr(-30, 30), duration: rr(4000, 9000), yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        placed++;
+      }
+    }
+
+    shootingStar() {
+      const v = this.cameras.main.worldView;
+      const s = this.add.image(v.x + rr(0, v.width), v.y + rr(0, v.height * 0.5), 'streak')
+        .setScale(1 / S).setRotation(0.45).setDepth(-5).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: s, x: s.x + 520, y: s.y + 250, alpha: 0, duration: 750, onComplete: () => s.destroy() });
     }
 
     readInput() {
       const JD = Phaser.Input.Keyboard.JustDown, c = this.cursors, k = this.keys;
-      const jump = [c.up, c.space, k.W].map(JD).includes(true) || touch.jump;
       const act = [k.E, k.ENTER].map(JD).includes(true) || touch.action;
-      touch.jump = touch.action = false;
+      touch.action = false;
       return {
-        left: c.left.isDown || k.A.isDown || touch.left,
-        right: c.right.isDown || k.D.isDown || touch.right,
-        jump, act,
+        left: c.left.isDown || k.A.isDown, right: c.right.isDown || k.D.isDown,
+        up: c.up.isDown || k.W.isDown, down: c.down.isDown || k.S.isDown,
+        boost: k.SHIFT.isDown || c.space.isDown || touch.boost, act,
       };
     }
 
-    update(time) {
+    update(time, delta) {
       const input = this.readInput(); // always read so presses during a dialog don't leak out afterwards
+      const cam0 = this.cameras.main;
+      this.starLayers.forEach(({ f, ts }) => ts.setTilePosition(cam0.scrollX * f, cam0.scrollY * f));
       if (this.locked) return;
-      const p = this.player;
+      const dt = Math.min(0.05, delta / 1000), s = this.ship, cam = this.cameras.main;
 
-      const onGround = p.body.blocked.down || p.body.touching.down;
-      if (onGround) this.lastGround = time;
-      if (input.jump) this.jumpBuffer = time;
-      if (time - this.jumpBuffer < 130 && time - this.lastGround < 110) {
-        p.setVelocityY(-JUMP);
-        this.jumpBuffer = this.lastGround = -1e9;
+      let ax = (input.right ? 1 : 0) - (input.left ? 1 : 0), ay = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+      const p = this.input.activePointer;
+      if (!ax && !ay && p.isDown) {
+        const wp = p.positionToCamera(cam), dx = wp.x - s.x, dy = wp.y - s.y, d = Math.hypot(dx, dy);
+        if (d > 30) { ax = dx / d; ay = dy / d; }
       }
+      const len = Math.hypot(ax, ay);
+      if (len) { ax /= len; ay /= len; }
+      const max = SPEED * (1 + Math.min(0.6, progress.coins * 0.015)) * (input.boost ? BOOST : 1);
+      const k = Math.min(1, dt * (len ? 2.6 : 1.3));
+      this.vel.x += (ax * max - this.vel.x) * k;
+      this.vel.y += (ay * max - this.vel.y) * k;
+      s.setVelocity(this.vel.x, this.vel.y);
+      if (this.vel.length() > 12) s.rotation = Phaser.Math.Angle.RotateTo(s.rotation, this.vel.angle(), dt * 7);
 
-      const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-      p.setVelocityX(dir * SPEED);
-      if (dir) p.setFlipX(dir < 0);
-      if (!onGround) { p.anims.stop(); p.setFrame(2); }
-      else if (dir) p.anims.play('run', true);
-      else { p.anims.stop(); p.setFrame(0); }
+      const bx = s.x - Math.cos(s.rotation) * 22, by = s.y - Math.sin(s.rotation) * 22;
+      const fl = (len ? (input.boost ? 1.6 : 1) : 0.3) * (0.85 + Math.random() * 0.3);
+      this.flame.setPosition(bx, by).setRotation(s.rotation).setScale(fl / S, (0.9 + Math.random() * 0.2) / S).setAlpha(len ? 1 : 0.6);
+      this.trail.setPosition(bx, by);
+      this.trail.emitting = !!len;
+      cam.setFollowOffset(-this.vel.x * 0.35, -this.vel.y * 0.25);
 
       for (const c of this.coins) {
-        if (!c.taken && Phaser.Math.Distance.Between(p.x, p.y, c.img.x, c.img.y) < 36) this.collect(c);
+        if (c.taken) continue;
+        c.a += c.w * dt;
+        const x = c.cx + Math.cos(c.a) * c.rad, y = c.cy + Math.sin(c.a) * c.rad;
+        c.img.setPosition(x, y);
+        c.label.setPosition(x, y - 16);
+        if (Phaser.Math.Distance.Between(s.x, s.y, x, y) < 44) this.collect(c);
       }
 
-      const near = this.buildings.find((b) => Math.abs(p.x - b.x) < b.half * 0.7);
-      const atGoal = Math.abs(p.x - this.goal.x) < this.goal.half * 0.6;
-      if ((near || atGoal) && onGround) {
-        this.prompt.setText(IS_TOUCH ? 'TAP E TO ENTER' : 'PRESS E TO ENTER').setPosition(p.x, p.y - 56).setVisible(true);
+      const near = this.buildings.find((b) => Phaser.Math.Distance.Between(s.x, s.y, b.x, b.y) < b.landR);
+      const atGoal = Phaser.Math.Distance.Between(s.x, s.y, this.goal.x, this.goal.y) < this.goal.landR;
+      this.buildings.forEach((b) => b.halo.setAlpha(b === near ? 1 : 0));
+      this.goal.halo.setAlpha(atGoal ? 1 : 0);
+      if (near || atGoal) {
+        this.prompt.setText(IS_TOUCH ? 'TAP E TO LAND' : 'PRESS E TO LAND').setPosition(s.x, s.y - 52).setVisible(true);
         if (input.act && time > this.cooldown) atGoal ? this.openGoal() : this.openStage(near.idx);
       } else {
         this.prompt.setVisible(false);
       }
 
-      UI.moveMarker(p.x / this.worldW);
+      UI.moveMarker(s.x / this.worldW);
     }
 
     collect(c) {
       c.taken = true;
-      this.tweens.killTweensOf([c.img, c.label]);
-      this.coinFx.explode(14, c.img.x, c.img.y);
+      this.tweens.killTweensOf(c.img);
+      this.burst.explode(22, c.img.x, c.img.y);
       c.img.destroy();
-      this.tweens.add({ targets: c.label, y: c.label.y - 40, alpha: 0, duration: 900, onComplete: () => c.label.destroy() });
+      this.tweens.add({ targets: c.label, y: c.label.y - 50, alpha: 0, scale: 1.4, duration: 1000, onComplete: () => c.label.destroy() });
       progress.coins++;
       progress.skills.add(c.name);
+      if (progress.coins % 5 === 0) this.popText(`ENGINE BOOST  ·  LV ${progress.coins / 5 + 1}`, '#67e8f9');
       UI.refresh();
     }
 
-    lock() { this.locked = true; this.physics.pause(); this.prompt.setVisible(false); this.player.anims.stop(); }
+    popText(msg, color) {
+      const t = this.add.text(this.ship.x, this.ship.y - 80, msg, font(16, color)).setOrigin(0.5).setDepth(12);
+      this.tweens.add({ targets: t, y: t.y - 60, alpha: 0, duration: 1600, ease: 'Cubic.out', onComplete: () => t.destroy() });
+    }
+
+    lock() {
+      this.locked = true;
+      this.physics.pause();
+      this.prompt.setVisible(false);
+      this.trail.emitting = false;
+      this.vel.set(0, 0);
+      this.flame.setAlpha(0.6).setScale(0.3 / S, 1 / S);
+    }
     unlock() { this.locked = false; this.physics.resume(); this.cooldown = this.time.now + 250; }
 
     openStage(i) {
@@ -380,13 +557,16 @@
     openGoal() {
       if (this.locked) return;
       this.lock();
-      this.confetti.explode(120, this.goal.x, GROUND_Y - 200);
-      this.time.delayedCall(700, () => UI.showGoal());
+      for (let k = 0; k < 6; k++) {
+        this.time.delayedCall(k * 160, () => this.fireworks.explode(70, this.goal.x + rr(-220, 220), this.goal.y + rr(-200, 120)));
+      }
+      this.time.delayedCall(1000, () => UI.showGoal());
     }
 
-    travelTo(x) {
-      this.player.setPosition(x, GROUND_Y - 60).setVelocity(0, 0);
-      this.cameras.main.centerOn(x + 140, H / 2);
+    travelTo(x, y) {
+      this.ship.setPosition(x, y).setVelocity(0, 0).setRotation(0);
+      this.vel.set(0, 0);
+      this.cameras.main.setFollowOffset(0, 0).centerOn(x, y);
     }
   }
 
@@ -402,7 +582,7 @@
       $('#intro-tag').textContent = CV.tagline || '';
       if (IS_TOUCH) {
         document.body.classList.add('touch');
-        $('.controls').innerHTML = '<li><kbd>◀</kbd><kbd>▶</kbd> move</li><li><kbd>▲</kbd> jump</li><li><kbd>E</kbd> enter building</li>';
+        $('.controls').innerHTML = '<li>Hold &amp; drag to fly</li><li><kbd>⚡</kbd> boost</li><li><kbd>E</kbd> land on a planet</li>';
       }
 
       const tl = $('#timeline');
@@ -411,16 +591,17 @@
         const dot = document.createElement('button');
         dot.className = 'dot ' + (st.type || 'work');
         dot.style.left = (b.x / sc.worldW) * 100 + '%';
-        dot.title = `${st.org} · ${st.period || ''} — click to travel`;
-        dot.onclick = () => { sc.travelTo(b.x - 180); dot.blur(); };
+        dot.style.setProperty('--c', st.color || '');
+        dot.title = `${st.org}${st.period ? ' · ' + st.period : ''} — click to warp`;
+        dot.onclick = () => { sc.travelTo(b.x - b.landR - 40, b.y); dot.blur(); };
         tl.appendChild(dot);
         b.dot = dot;
       });
       const g = document.createElement('button');
       g.className = 'dot goal';
       g.style.left = (sc.goal.x / sc.worldW) * 100 + '%';
-      g.title = 'Contact — click to travel';
-      g.onclick = () => { sc.travelTo(sc.goal.x - 220); g.blur(); };
+      g.title = 'Contact beacon — click to warp';
+      g.onclick = () => { sc.travelTo(sc.goal.x - 260, sc.goal.y); g.blur(); };
       tl.appendChild(g);
 
       this.refresh();
@@ -454,8 +635,8 @@
       scene.buildings.forEach((b) => b.dot && b.dot.classList.toggle('visited', progress.visited.has(b.idx)));
       const got = [...progress.skills];
       $('#bag').innerHTML = got.length
-        ? `<p>Skills collected</p><div class="chips">${got.map((s) => `<span class="chip got">${esc(s)}</span>`).join('')}</div>`
-        : '<p>No skills yet — jump for the coins! 🪙</p>';
+        ? `<p>Skill crystals collected</p><div class="chips">${got.map((s) => `<span class="chip got">${esc(s)}</span>`).join('')}</div>`
+        : '<p>No crystals yet — fly through the ones orbiting each planet 💎</p>';
     },
 
     moveMarker(f) {
@@ -497,6 +678,7 @@
       const chips = (st.skills || [])
         .map((s) => `<span class="chip ${progress.skills.has(s) ? 'got' : ''}">${progress.skills.has(s) ? '✓ ' : ''}${esc(s)}</span>`)
         .join('');
+      $('#modal .card').style.setProperty('--c', st.color || '');
       this.openModal(
         `<div class="badge">${meta.icon} ${meta.label}${st.period ? ' · ' + esc(st.period) : ''}</div>
          <h2>${esc(st.title)}</h2>
@@ -504,9 +686,9 @@
          ${st.summary ? `<p>${esc(st.summary)}</p>` : ''}
          ${st.points && st.points.length ? `<ul>${st.points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
          ${st.type === 'toolkit' ? (CV.skillGroups || []).map((g) => `<p class="group"><b>${esc(g.label)}:</b> ${g.items.map(esc).join(', ')}</p>`).join('') : ''}
-         ${chips ? `<p class="label">Skills unlocked here</p><div class="chips">${chips}</div>` : ''}
-         <p class="hint">Level ${i + 1} of ${CV.stages.length}</p>`,
-        [['Continue ▶', () => this.closeModal(), 'primary']]
+         ${chips ? `<p class="label">Skill crystals in orbit</p><div class="chips">${chips}</div>` : ''}
+         <p class="hint">Planet ${i + 1} of ${CV.stages.length}</p>`,
+        [['Take off ▶', () => this.closeModal(), 'primary']]
       );
     },
 
@@ -524,17 +706,18 @@
       const links = this.contactLinks()
         .map(([l, h]) => `<a class="btn" href="${esc(h)}" target="_blank" rel="noopener">${esc(l)}</a>`)
         .join('');
+      $('#modal .card').style.setProperty('--c', '#fbbf24');
       this.openModal(
-        `<div class="badge">🏆 Quest complete</div>
-         <h2>Thanks for playing!</h2>
-         <p>You explored <b>${progress.visited.size}/${CV.stages.length}</b> levels and collected
-            <b>${progress.coins}/${progress.totalCoins}</b> skill coins.</p>
+        `<div class="badge">🏆 Mission complete</div>
+         <h2>Thanks for flying!</h2>
+         <p>You landed on <b>${progress.visited.size}/${CV.stages.length}</b> planets and collected
+            <b>${progress.coins}/${progress.totalCoins}</b> skill crystals.</p>
          ${CV.rightToWork ? `<p>✅ ${esc(CV.rightToWork)}</p>` : ''}
          <p class="label">Get in touch${CV.contact && CV.contact.location ? ' · ' + esc(CV.contact.location) : ''}</p>
          <div class="links">${links}</div>`,
         [
           ['📄 Classic CV', () => { this.closeModal(); this.openClassic(); }],
-          ['↺ Play again', () => { this.closeModal(); scene.travelTo(140); }],
+          ['↺ Fly again', () => { this.closeModal(); scene.travelTo(scene.start.x, scene.start.y); }],
           ['Close', () => this.closeModal(), 'primary'],
         ]
       );
@@ -544,7 +727,7 @@
       document.querySelectorAll('#touch button').forEach((b) => {
         const k = b.dataset.k;
         const down = (e) => { e.preventDefault(); touch[k] = true; b.classList.add('on'); };
-        const up = (e) => { e.preventDefault(); if (k === 'left' || k === 'right') touch[k] = false; b.classList.remove('on'); };
+        const up = (e) => { e.preventDefault(); if (k === 'boost') touch[k] = false; b.classList.remove('on'); };
         b.addEventListener('pointerdown', down);
         ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => b.addEventListener(ev, up));
       });
@@ -598,20 +781,20 @@
     },
   };
 
-  // Start once the pixel font is ready so canvas text renders in it
-  const fontReady = document.fonts ? document.fonts.load(`16px ${FONT}`) : Promise.resolve();
+  // Start once the display font is ready so canvas text renders in it.
+  // The canvas is sized in device pixels and shown at 1/DPR so everything stays sharp on retina screens.
+  const fontReady = document.fonts ? document.fonts.load(`700 20px Orbitron`) : Promise.resolve();
   Promise.race([fontReady, new Promise((r) => setTimeout(r, 2000))]).then(() => {
-    new Phaser.Game({
+    const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: 'game',
-      width: W,
-      height: H,
-      pixelArt: true,
-      backgroundColor: '#93c5fd',
-      physics: { default: 'arcade', arcade: { gravity: { y: 1500 }, debug: false } },
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      backgroundColor: '#030712',
+      antialias: true,
+      physics: { default: 'arcade', arcade: { debug: false } },
+      scale: { mode: Phaser.Scale.NONE, width: innerWidth * DPR, height: innerHeight * DPR, zoom: 1 / DPR },
       audio: { noAudio: true },
-      scene: [Level],
+      scene: [Space],
     });
+    window.addEventListener('resize', () => game.scale.resize(innerWidth * DPR, innerHeight * DPR));
   });
 })();

@@ -2,9 +2,10 @@
 //  ✏️  ALL CV CONTENT LIVES HERE — the game builds itself from this file.
 //
 //  stages[]  → one level section each, in chronological order (oldest first).
-//    type    → "education" (school), "work" (office tower), "project" (workshop)
-//              or "toolkit" (tool shed — its card shows skillGroups)
-//    skills  → become collectible coins placed in front of that building
+//    type    → "education" (ringed planet), "work" (gas giant), "project" (moon)
+//              or "toolkit" (space station — its card shows skillGroups)
+//    color   → planet colour (optional)
+//    skills  → become collectible crystals orbiting that planet
 // =====================================================================
 window.CV = {
   name: "Mayank Singh Kunwar",
@@ -33,6 +34,7 @@ window.CV = {
       type: "education",
       title: "BTech Computer Science and Engineering",
       org: "Kumaon Engineering College",
+      color: "#3b82f6",
       period: "2011 – 2015",
       location: "Uttarakhand, India",
       points: ["Uttarakhand Technical University."],
@@ -42,6 +44,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Siemens",
+      color: "#0d9488",
       period: "Apr 2017 – Jan 2020",
       location: "Bangalore, India",
       points: [
@@ -57,6 +60,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Red Hat",
+      color: "#dc2626",
       period: "Jan 2020 – Jun 2022",
       location: "Bangalore, India",
       points: [
@@ -73,6 +77,7 @@ window.CV = {
       type: "work",
       title: "Senior Software Engineer",
       org: "Cloudera",
+      color: "#f97316",
       period: "Jun 2022 – Aug 2025",
       location: "Bangalore, India",
       points: [
@@ -90,6 +95,7 @@ window.CV = {
       type: "education",
       title: "MSc Advanced Computer Science",
       org: "Newcastle University",
+      color: "#7c3aed",
       period: "2025 – 2026",
       location: "Newcastle upon Tyne, UK",
       points: ["Dissertation in collaboration with IBM on modernising the Apache ActiveMQ Artemis journal (next level →)."],
@@ -99,6 +105,7 @@ window.CV = {
       type: "project",
       title: "MSc Dissertation: Modernising the Apache ActiveMQ Artemis Journal",
       org: "Newcastle University × IBM",
+      color: "#94a3b8",
       period: "2025 – 2026",
       location: "Research project",
       points: [
@@ -112,6 +119,7 @@ window.CV = {
       type: "toolkit",
       title: "Technical Toolkit",
       org: "Skills Workshop",
+      color: "#a78bfa",
       period: "",
       location: "",
       points: [],
