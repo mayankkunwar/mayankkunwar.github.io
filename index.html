@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CV Quest</title>
+  <meta name="description" content="An interactive, playable CV — walk through my career one level at a time." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- HUD -->
+  <header id="hud">
+    <div class="who"><b id="hud-name"></b><span id="hud-title"></span></div>
+    <div class="timeline" id="timeline" aria-label="Career timeline — click a stop to travel there">
+      <div class="track"></div>
+      <div class="me" id="me" aria-hidden="true">▼</div>
+    </div>
+    <div class="stats">
+      <span title="Checkpoints visited">🏁 <b id="hud-cp">0/0</b></span>
+      <button id="btn-bag" title="Skills collected">🪙 <b id="hud-sk">0/0</b></button>
+      <button id="btn-cv" title="Open the classic, printable CV">📄 CV</button>
+    </div>
+    <div id="bag" class="hidden"></div>
+  </header>
+
+  <!-- Intro -->
+  <div id="intro" class="overlay">
+    <div class="intro">
+      <p class="eyebrow">CV QUEST</p>
+      <h1 id="intro-name"></h1>
+      <p id="intro-title" class="intro-title"></p>
+      <p id="intro-tag" class="intro-tag"></p>
+      <ul class="controls">
+        <li><kbd>←</kbd><kbd>→</kbd> move</li>
+        <li><kbd>↑</kbd>/<kbd>Space</kbd> jump</li>
+        <li><kbd>E</kbd> enter building</li>
+      </ul>
+      <button id="btn-start" class="primary blink" disabled>▶ PRESS START</button>
+      <button id="btn-skip" class="link">or read the classic CV</button>
+    </div>
+  </div>
+
+  <!-- Stage / goal dialog -->
+  <div id="modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="card">
+      <button class="x" data-close aria-label="Close">✕</button>
+      <div id="modal-body"></div>
+      <div class="actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- Classic CV -->
+  <div id="classic" class="hidden">
+    <div class="classic-bar">
+      <button id="btn-print">🖨 Print / PDF</button>
+      <button id="btn-back" class="primary">🎮 Back to game</button>
+    </div>
+    <article class="doc" id="doc"></article>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch">
+    <div class="pad">
+      <button data-k="left" aria-label="Move left">◀</button>
+      <button data-k="right" aria-label="Move right">▶</button>
+    </div>
+    <div class="pad">
+      <button data-k="action" aria-label="Enter">E</button>
+      <button data-k="jump" aria-label="Jump">▲</button>
+    </div>
+  </div>
+  <div id="rotate">↻ Rotate your phone for the best view</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="data.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
