@@ -5,6 +5,7 @@
 //    type    → "education" (ringed planet), "work" (gas giant), "project" (moon)
 //              or "toolkit" (space station — its card shows skillGroups)
 //    color   → planet colour (optional)
+//    logo    → logo file path, or a list of paths (optional; shown unmodified on a white badge)
 //    skills  → become collectible crystals orbiting that planet
 // =====================================================================
 window.CV = {
@@ -44,6 +45,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Siemens",
+      logo: "logos/siemens.svg",
       color: "#0d9488",
       period: "Apr 2017 – Jan 2020",
       location: "Bangalore, India",
@@ -60,6 +62,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Red Hat",
+      logo: "logos/redhat.svg",
       color: "#dc2626",
       period: "Jan 2020 – Jun 2022",
       location: "Bangalore, India",
@@ -77,6 +80,7 @@ window.CV = {
       type: "work",
       title: "Senior Software Engineer",
       org: "Cloudera",
+      logo: "logos/cloudera.svg",
       color: "#f97316",
       period: "Jun 2022 – Aug 2025",
       location: "Bangalore, India",
@@ -95,6 +99,7 @@ window.CV = {
       type: "education",
       title: "MSc Advanced Computer Science",
       org: "Newcastle University",
+      logo: "logos/newcastle.svg",
       color: "#7c3aed",
       period: "2025 – 2026",
       location: "Newcastle upon Tyne, UK",
@@ -105,6 +110,7 @@ window.CV = {
       type: "project",
       title: "MSc Dissertation: Modernising the Apache ActiveMQ Artemis Journal",
       org: "Newcastle University × IBM",
+      logo: ["logos/newcastle.svg", "logos/ibm.svg"],
       color: "#94a3b8",
       period: "2025 – 2026",
       location: "Research project",

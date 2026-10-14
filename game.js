@@ -31,6 +31,30 @@
   });
 
   const touch = { up: false, boost: false, action: false };
+  const logosOf = (st) => [].concat(st.logo || []);
+  const logoCache = {};   // url -> { img, a: aspect ratio }
+
+  // Fetch each logo as text so SVGs without width/height still give an aspect ratio, and so the
+  // canvas isn't tainted. On file:// fetch fails and planets just keep their text labels.
+  function loadLogos() {
+    const urls = [...new Set((CV.stages || []).flatMap(logosOf))];
+    return Promise.all(urls.map(async (u) => {
+      try {
+        const img = new Image();
+        let a = 0;
+        if (/\.svg$/i.test(u)) {
+          const txt = await (await fetch(u)).text();
+          const vb = txt.match(/viewBox="([^"]+)"/);
+          if (vb) { const v = vb[1].trim().split(/[\s,]+/).map(Number); a = v[2] / v[3]; }
+          img.src = URL.createObjectURL(new Blob([txt], { type: 'image/svg+xml' }));
+        } else {
+          img.src = u;
+        }
+        await img.decode();
+        logoCache[u] = { img, a: a || img.naturalWidth / img.naturalHeight };
+      } catch (e) { /* missing or unreadable logo: fall back to the text label */ }
+    }));
+  }
   const progress = { visited: new Set(), coins: 0, totalCoins: 0, skills: new Set() };
   let scene = null;
 
@@ -62,6 +86,27 @@
     return g;
   };
   const circle = (ctx, x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); };
+  const roundRect = (ctx, x, y, w, h, r) => {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  };
+
+  // White rounded badge with the logo(s) drawn unmodified (only scaled to fit)
+  function logoBadge(sc, key, logos, color) {
+    const LH = 34, MAXW = 150, pad = 12, gap = 18, m = 10;
+    const dims = logos.map(({ a }) => { const w = Math.min(MAXW, LH * a); return { w, h: w / a }; });
+    const bw = dims.reduce((t, d) => t + d.w, 0) + gap * (dims.length - 1) + pad * 2;
+    const bh = Math.max(...dims.map((d) => d.h)) + pad * 2;
+    canvasTex(sc, key, bw + m * 2, bh + m * 2, (ctx) => {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+      roundRect(ctx, m, m, bw, bh, 10); ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; roundRect(ctx, m, m, bw, bh, 10); ctx.stroke();
+      let x = m + pad;
+      logos.forEach(({ img }, k) => { ctx.drawImage(img, x, m + (bh - dims[k].h) / 2, dims[k].w, dims[k].h); x += dims[k].w + gap; });
+    });
+  }
 
   function planetTextures(sc, key, r, color, kind) {
     const size = Math.ceil(r * (kind === 'ringed' ? 4 : 3.2)), c = size / 2;
@@ -402,7 +447,13 @@
 
       const halo = this.add.circle(x, y, landR, 0x22d3ee, 0.04).setStrokeStyle(2, 0x67e8f9, 0.7).setDepth(1).setAlpha(0);
       this.tweens.add({ targets: halo, scale: 1.04, duration: 900, yoyo: true, repeat: -1 });
-      this.add.text(x, y - top - (st.period ? 22 : 0), st.org, { ...font(22), wordWrap: { width: 420 } }).setOrigin(0.5, 1).setDepth(6);
+      const logos = logosOf(st).map((u) => logoCache[u]).filter(Boolean);
+      if (logos.length) {
+        logoBadge(this, 'logo' + i, logos, color);
+        this.add.image(x, y - top - (st.period ? 18 : 0), 'logo' + i).setScale(1 / S).setOrigin(0.5, 1).setDepth(6);
+      } else {
+        this.add.text(x, y - top - (st.period ? 22 : 0), st.org, { ...font(22), wordWrap: { width: 420 } }).setOrigin(0.5, 1).setDepth(6);
+      }
       if (st.period) this.add.text(x, y - top, st.period, font(14, '#67e8f9')).setOrigin(0.5, 1).setDepth(6);
 
       const skills = st.skills || [];
@@ -681,6 +732,7 @@
       $('#modal .card').style.setProperty('--c', st.color || '');
       this.openModal(
         `<div class="badge">${meta.icon} ${meta.label}${st.period ? ' · ' + esc(st.period) : ''}</div>
+         ${logosOf(st).length ? `<div class="logos">${logosOf(st).map((u) => `<img src="${esc(u)}" alt="">`).join('')}</div>` : ''}
          <h2>${esc(st.title)}</h2>
          <h3>${esc(st.org)}${st.location ? ' · ' + esc(st.location) : ''}</h3>
          ${st.summary ? `<p>${esc(st.summary)}</p>` : ''}
@@ -784,7 +836,7 @@
   // Start once the display font is ready so canvas text renders in it.
   // The canvas is sized in device pixels and shown at 1/DPR so everything stays sharp on retina screens.
   const fontReady = document.fonts ? document.fonts.load(`700 20px Orbitron`) : Promise.resolve();
-  Promise.race([fontReady, new Promise((r) => setTimeout(r, 2000))]).then(() => {
+  Promise.all([Promise.race([fontReady, new Promise((r) => setTimeout(r, 2000))]), loadLogos()]).then(() => {
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: 'game',
