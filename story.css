@@ -222,7 +222,7 @@ footer a:hover { text-decoration: underline; }
    Fly mode (game3d.js)
    ===================================================================== */
 html.fly-lock, html.fly-lock body { overflow: hidden; }
-body.flying { touch-action: none; }
+body.flying #space { touch-action: none; }   /* only the 3D view; the card must still pan */
 #nav, main, footer, #progress { transition: opacity 0.8s var(--ease), visibility 0.8s; }
 body.flying #nav, body.flying main, body.flying footer, body.flying #progress { opacity: 0; visibility: hidden; pointer-events: none; }
 
@@ -302,7 +302,8 @@ body.flying #nav, body.flying main, body.flying footer, body.flying #progress { 
 
 .fly-card {
   --c: #22d3ee;
-  position: absolute; top: 50%; right: 4vw; width: min(460px, 44vw); max-height: 80vh; overflow: auto;
+  position: absolute; top: 50%; right: 4vw; width: min(460px, 44vw); max-height: 80vh; overflow-y: auto; outline: none;
+  overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch;
   padding: 30px 30px 24px; border-radius: 28px;
   background: linear-gradient(160deg, color-mix(in srgb, var(--c) 14%, rgba(18, 18, 22, 0.72)), rgba(18, 18, 22, 0.72) 50%);
   border: 1px solid rgba(255, 255, 255, 0.12);

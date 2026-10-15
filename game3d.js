@@ -183,7 +183,7 @@ export function createGame(o) {
       <div class="fly-guide" id="fly-guide"><span class="arrow">➜</span><span class="txt"></span></div>
       <button class="fly-prompt" id="fly-prompt" type="button"></button>
       <div class="fly-toasts" id="fly-toasts"></div>
-      <aside class="fly-card" id="fly-card" aria-live="polite"><div class="fly-card-body"></div><div class="fly-card-actions"></div></aside>
+      <aside class="fly-card" id="fly-card" aria-live="polite" tabindex="-1" data-lenis-prevent><div class="fly-card-body"></div><div class="fly-card-actions"></div></aside>
       <div class="fly-hint" id="fly-hint">${isTouch
         ? 'Drag to steer and fly · <b>Boost</b> for warp speed · tap the prompt to land'
         : '<b>Hold the mouse</b> to fly toward the cursor · <b>Arrows</b> steer · <b>W</b> thrust · <b>Shift</b> boost · <b>E</b> land · <b>P</b> autopilot'}</div>
@@ -223,7 +223,8 @@ export function createGame(o) {
   function bindInput() {
     addEventListener('keydown', (e) => {
       if (!active) return;
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      // Arrow keys/space steer while flying; while landed they're left alone so the card can scroll
+      if (mode === 'fly' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
       keys[e.code] = true;
       if (e.code === 'Escape') { mode === 'landed' ? takeOff() : exit(); return; }
@@ -372,6 +373,7 @@ export function createGame(o) {
     }
     ui.card.scrollTop = 0;
     ui.card.classList.add('show');
+    ui.card.focus({ preventScroll: true });   // keyboard scrolling (arrows, space) goes to the card
   }
   function addAction(box, label, fn, cls = '') {
     const b = document.createElement('button');
