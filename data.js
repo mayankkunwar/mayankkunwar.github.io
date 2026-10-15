@@ -4,6 +4,7 @@
 //  stages[]  → one level section each, in chronological order (oldest first).
 //    type    → "education" (ringed planet), "work" (gas giant), "project" (moon)
 //              or "toolkit" (space station — its card shows skillGroups)
+//    headline→ big chapter headline on the story page
 //    color   → planet colour (optional)
 //    logo    → logo file path, or a list of paths (optional; shown unmodified on a white badge)
 //    skills  → become collectible crystals orbiting that planet
@@ -35,6 +36,7 @@ window.CV = {
       type: "education",
       title: "BTech Computer Science and Engineering",
       org: "Kumaon Engineering College",
+      headline: "Where it all began.",
       color: "#3b82f6",
       period: "2011 – 2015",
       location: "Uttarakhand, India",
@@ -45,6 +47,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Siemens",
+      headline: "100× faster.",
       logo: "logos/siemens.svg",
       color: "#0d9488",
       period: "Apr 2017 – Jan 2020",
@@ -62,6 +65,7 @@ window.CV = {
       type: "work",
       title: "Software Engineer",
       org: "Red Hat",
+      headline: "Transactions, tamed.",
       logo: "logos/redhat.svg",
       color: "#dc2626",
       period: "Jan 2020 – Jun 2022",
@@ -80,6 +84,7 @@ window.CV = {
       type: "work",
       title: "Senior Software Engineer",
       org: "Cloudera",
+      headline: "Data at serious scale.",
       logo: "logos/cloudera.svg",
       color: "#f97316",
       period: "Jun 2022 – Aug 2025",
@@ -99,6 +104,7 @@ window.CV = {
       type: "education",
       title: "MSc Advanced Computer Science",
       org: "Newcastle University",
+      headline: "Back to first principles.",
       logo: "logos/newcastle.svg",
       color: "#7c3aed",
       period: "2025 – 2026",
@@ -110,6 +116,7 @@ window.CV = {
       type: "project",
       title: "MSc Dissertation: Modernising the Apache ActiveMQ Artemis Journal",
       org: "Newcastle University × IBM",
+      headline: "Rewriting the journal.",
       logo: ["logos/newcastle.svg", "logos/ibm.svg"],
       color: "#94a3b8",
       period: "2025 – 2026",
@@ -125,6 +132,7 @@ window.CV = {
       type: "toolkit",
       title: "Technical Toolkit",
       org: "Skills Workshop",
+      headline: "The full toolkit.",
       color: "#a78bfa",
       period: "",
       location: "",
@@ -143,6 +151,27 @@ window.CV = {
     { label: "Cloud & Infrastructure", items: ["Kubernetes (3 yrs)", "AWS", "GCP", "Azure", "Docker", "Terraform"] },
     { label: "Testing, QA & Tools", items: ["JMH Benchmarking", "JUnit", "Mockito", "Jenkins CI/CD", "Git", "Maven", "Postman", "Apache Tomcat"] },
     { label: "Practices", items: ["System Design", "Performance Tuning", "Regression Testing", "Technical Documentation", "Code Review", "Mentoring", "Agile"] },
+  ],
+
+  // ---------------- Story page (index.html) ----------------
+  statement:
+    "8+ years designing distributed systems that stay fast under pressure — at Siemens, Red Hat and Cloudera, " +
+    "and now in research with IBM at Newcastle University.",
+
+  stats: [
+    { value: 8, suffix: "+", label: "years building backend systems" },
+    { value: 3, suffix: "", label: "global tech companies" },
+    { value: 20, suffix: "+", label: "engineers mentored" },
+    { value: 3, suffix: "", label: "clouds: AWS, GCP and Azure" },
+  ],
+
+  highlights: [
+    { value: "100×", label: "lower query latency from re-architected APIs, data sharding and indexing.", org: "Siemens", logo: "logos/siemens.svg", color: "#0d9488" },
+    { value: "40%", label: "lower Apache Hive query latency with new caching layers.", org: "Cloudera", logo: "logos/cloudera.svg", color: "#f97316" },
+    { value: "~16%", label: "higher transactional throughput with a pure-FFM io_uring journal backend.", org: "Newcastle University × IBM", logo: "logos/ibm.svg", color: "#3b82f6" },
+    { value: "0", label: "performance regression after replacing JNI with Java's FFM API.", org: "Newcastle University × IBM", logo: "logos/newcastle.svg", color: "#7c3aed" },
+    { value: "30%", label: "faster resolution of engineering escalations, working with support teams.", org: "Cloudera", logo: "logos/cloudera.svg", color: "#f97316" },
+    { value: "20+", label: "developers mentored through code reviews, guidance and knowledge sharing.", org: "Cloudera", logo: "logos/cloudera.svg", color: "#f59e0b" },
   ],
 
   extras: [],

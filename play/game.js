@@ -677,6 +677,7 @@
       $('#btn-bag').onclick = (e) => { e.currentTarget.blur(); $('#bag').classList.toggle('hidden'); };
       $('#btn-back').onclick = () => this.closeClassic();
       $('#btn-print').onclick = () => window.print();
+      if (location.hash === '#cv') { go(); this.openClassic(); }   // deep link from the story page
     },
 
     refresh() {

@@ -52,7 +52,7 @@ button.primary, a.btn {
 button.primary:hover, a.btn:hover { background: linear-gradient(135deg, #a5f3fc, #22d3ee 45%, #60a5fa); box-shadow: 0 0 28px rgba(34, 211, 238, 0.7); }
 button.primary:active, .actions button:active, a.btn:active { transform: scale(0.97); }
 button:disabled { opacity: 0.5; cursor: wait; }
-button.link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 8px; }
+button.link, a.link { display: inline-block; background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 8px; }
 
 /* ---------- HUD ---------- */
 #hud {
@@ -92,7 +92,8 @@ button.link { background: none; border: 0; color: var(--muted); text-decoration:
 }
 .stats { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .stats b { font-family: var(--display); font-size: 12px; }
-.stats button {
+.stats button, #btn-home {
+  text-decoration: none; font-size: 12px;
   background: var(--glass-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
 }
 #bag {

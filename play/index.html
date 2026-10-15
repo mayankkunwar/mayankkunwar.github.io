@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- Shared assets (data.js, logos/) live one level up -->
+  <base href="../" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CV Quest · Play</title>
+  <meta name="description" content="An interactive, playable CV — fly a spaceship through my career, one planet at a time." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="play/style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- HUD -->
+  <header id="hud">
+    <div class="who"><b id="hud-name"></b><span id="hud-title"></span></div>
+    <div class="timeline" id="timeline" aria-label="Career timeline — click a stop to travel there">
+      <div class="track"></div>
+      <div class="me" id="me" aria-hidden="true">▼</div>
+    </div>
+    <div class="stats">
+      <span title="Planets visited">🪐 <b id="hud-cp">0/0</b></span>
+      <button id="btn-bag" title="Skill crystals collected">💎 <b id="hud-sk">0/0</b></button>
+      <button id="btn-cv" title="Open the classic, printable CV">📄 CV</button>
+      <a id="btn-home" href="./" title="Back to the story">✕</a>
+    </div>
+    <div id="bag" class="hidden"></div>
+  </header>
+
+  <!-- Intro -->
+  <div id="intro" class="overlay">
+    <div class="intro">
+      <p class="eyebrow">CV QUEST · A CAREER IN ORBIT</p>
+      <h1 id="intro-name"></h1>
+      <p id="intro-title" class="intro-title"></p>
+      <p id="intro-tag" class="intro-tag"></p>
+      <ul class="controls">
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows or hold mouse to fly</li>
+        <li><kbd>Shift</kbd> boost</li>
+        <li><kbd>E</kbd> land on a planet</li>
+      </ul>
+      <button id="btn-start" class="primary glow" disabled>🚀 LAUNCH</button>
+      <button id="btn-skip" class="link">or read the classic CV</button>
+      <a class="link" href="./">← back to the story</a>
+    </div>
+  </div>
+
+  <!-- Stage / goal dialog -->
+  <div id="modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="card">
+      <button class="x" data-close aria-label="Close">✕</button>
+      <div id="modal-body"></div>
+      <div class="actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- Classic CV -->
+  <div id="classic" class="hidden">
+    <div class="classic-bar">
+      <button id="btn-print">🖨 Print / PDF</button>
+      <button id="btn-back" class="primary">🎮 Back to game</button>
+    </div>
+    <article class="doc" id="doc"></article>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch">
+    <span class="touch-hint">Hold anywhere to fly</span>
+    <div class="pad">
+      <button data-k="boost" aria-label="Boost">⚡</button>
+      <button data-k="action" aria-label="Land">E</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="data.js"></script>
+  <script src="play/game.js"></script>
+</body>
+</html>

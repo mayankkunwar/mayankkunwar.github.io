@@ -1,27 +1,28 @@
-# CV Quest — a playable CV
+# Mayank Singh Kunwar — CV
 
-A space-flight game (Phaser 3) where visitors pilot a ship through your career: each school/job/project is a
-planet to land on, each skill is a crystal orbiting it, and the beacon star at the end is your contact page.
-All graphics are drawn procedurally in code (no image assets) and rendered at device resolution.
-A "📄 CV" button opens a classic, printable version for recruiters in a hurry.
+Two ways to explore the same CV, both built from **`data.js`** (the single source of truth):
 
-## Edit your content
-Everything comes from **`data.js`** — no need to touch the game code.
+| Path | What it is |
+| --- | --- |
+| `/` | Cinematic, Apple-style scroll story: real-time 3D planets (Three.js + bloom) with a camera that flies between them as you scroll, pinned chapters per career stage, highlights carousel, skills, contact. |
+| `/play/` | **CV Quest** — a space-flight game (Phaser 3): land on planets, collect skill crystals. `play/#cv` opens the printable CV. |
+| `/classic.html` | The original plain CV page. |
+
+## Edit content
+Everything lives in `data.js`: stages (with `headline`, `color`, `logo`), `statement`, `stats`, `highlights`, `skillGroups`, contact.
 
 ## Run locally
-Run `python3 -m http.server` here and visit http://localhost:8000 (no build step).
-Opening `index.html` directly also works, but browsers block loading the logo files from disk, so planets show text labels instead.
+`python3 -m http.server` in this folder, then open http://localhost:8000 (no build step).
+Opening the HTML files straight from disk mostly works, but browsers block loading the logos that way.
 
-## Deploy
-Static files only — drop the folder on GitHub Pages, Netlify or Vercel.
+## Tech
+- Story page: Three.js 0.160 (custom GLSL planets, atmosphere, rings, sun; UnrealBloom), GSAP 3.12 + ScrollTrigger, Lenis smooth scroll. Respects `prefers-reduced-motion`; falls back to a gradient if WebGL is unavailable.
+- Game: Phaser 3.80, procedural canvas textures, DPR-aware rendering.
 
-## Controls
-WASD / arrows or hold the mouse to fly · Shift / Space boost · E / Enter land · on phones: hold to fly, ⚡ boost, E land
+## Controls (game)
+WASD / arrows or hold the mouse to fly · Shift / Space boost · E / Enter land · on phones: hold to fly, ⚡ boost, E land.
 Click a timeline marker in the top bar to warp.
 
 ## Logos
 Company and university logos in `logos/` are from Wikimedia Commons / Wikipedia and are trademarks of their owners.
 They're shown unmodified to identify where I worked and studied.
-
-## Classic page
-The original plain CV page is still live at `/classic.html`.
