@@ -57,7 +57,7 @@ export function createGame(o) {
     const white = env(new THREE.MeshPhysicalMaterial({ color: 0xf1f3f7, metalness: 0.5, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }));
     const graphite = env(new THREE.MeshPhysicalMaterial({ color: 0x232833, metalness: 0.75, roughness: 0.32, clearcoat: 0.6, side: THREE.DoubleSide }));
     const glass = env(new THREE.MeshPhysicalMaterial({ color: 0x07121f, metalness: 0.9, roughness: 0.04, clearcoat: 1, emissive: 0x0c4a6e, emissiveIntensity: 0.45 }));
-    const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.0, 1.45) });
+    const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.75, 1.1) });
 
     // Fuselage: lathe profile, nose toward -z (forward)
     const prof = [[0, -2.5], [0.22, -2.3], [0.46, -1.7], [0.6, -0.7], [0.6, 0.6], [0.52, 1.4], [0.44, 1.85], [0, 1.9]];
@@ -520,7 +520,7 @@ export function createGame(o) {
     }
 
     // Engines + lights
-    const power = clamp(0.25 + (speed / BOOST) * 1.3, 0, 1.6);
+    const power = clamp(0.12 + (speed / BOOST) * 1.25, 0, 1.4);
     parts.exhaust.forEach((ex) => {
       ex.material.uniforms.uPower.value = power;
       ex.material.uniforms.uTime.value = t;

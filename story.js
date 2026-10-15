@@ -463,7 +463,8 @@ function initSpace() {
   }
   addEventListener('resize', resize);
 
-  let last = performance.now(), first = true, game = null;
+  let last = performance.now(), first = true, game = null, markReady;
+  const ready = new Promise((r) => (markReady = r));   // resolves once the camera has been placed and drawn
   const schedule = CAPTURE ? (f) => setTimeout(() => f(performance.now()), 16) : requestAnimationFrame;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -493,12 +494,12 @@ function initSpace() {
     corona.material.rotation += dt * 0.02;
 
     composer.render();
-    if (first) { first = false; canvas.classList.add('ready'); }
+    if (first) { first = false; canvas.classList.add('ready'); markReady(); }
     schedule(frame);
   }
   schedule(frame);
 
-  return { setTarget: (t) => (targetT = t), N, scene, camera, renderer, bodies, centers, sunC, sunR: 6, LIGHT, setGame: (gm) => (game = gm) };
+  return { setTarget: (t) => (targetT = t), N, scene, camera, renderer, bodies, centers, sunC, sunR: 6, LIGHT, ready, setGame: (gm) => (game = gm) };
 }
 
 // ====================================================================
@@ -673,8 +674,10 @@ if (space) {
     hooks: { onEnter: scrollApi.lock, onExit: scrollApi.unlock },
   });
   space.setGame(game);
-  $$('[data-fly]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); a.blur(); game.enter(); }));
-  if (location.hash === '#fly') setTimeout(() => game.enter(), 700);
+  // The ship spawns in front of the current camera, so wait for the first rendered frame
+  const fly = () => space.ready.then(() => game.enter());
+  $$('[data-fly]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); a.blur(); fly(); }));
+  if (location.hash === '#fly') space.ready.then(() => setTimeout(fly, 600));
 } else {
   $$('[data-fly]').forEach((a) => a.remove());   // no WebGL, no flight
 }
