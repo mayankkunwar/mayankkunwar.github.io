@@ -63,7 +63,7 @@ function render() {
         <p class="hero-sub">${esc(CV.tagline || '')}</p>
         <div class="hero-cta">
           <a class="btn primary" href="#journey">Start the journey</a>
-          <a class="btn ghost" href="play/">Play the game ›</a>
+          <a class="btn ghost" href="cv.html">View CV ›</a>
         </div>
         <div class="scroll-cue">Scroll</div>
       </div>
@@ -92,23 +92,16 @@ function render() {
         <div class="skill-card glass" data-reveal><h3>${esc(g.label)}</h3><div class="chips">${g.items.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div></div>`).join('')}</div>
     </section>` : ''}
 
-    <section class="play" id="play">
-      <p class="eyebrow grad-text" data-reveal>Prefer to explore?</p>
-      <h2 data-reveal>Fly through it.</h2>
-      <p data-reveal>The same career, as a game. Pilot a ship from planet to planet, collect skill crystals and land to read each chapter.</p>
-      <a class="btn primary big glow" href="play/" data-reveal>▶ Launch the game</a>
-    </section>
-
     <section class="contact" id="contact">
       <h2 data-reveal>Let’s talk.</h2>
       <p data-reveal>${esc(c.location || '')}${CV.rightToWork ? ' · ' + esc(CV.rightToWork) : ''}</p>
-      <div class="contact-links" data-reveal>${links}</div>
+      <div class="contact-links" data-reveal>${links}<a class="btn light" href="cv.html">Printable CV</a></div>
     </section>`;
 
   document.body.insertAdjacentHTML('beforeend', `
     <footer><div class="inner">
       <span>© ${new Date().getFullYear()} ${esc(CV.name)}</span>
-      <span><a href="play/#cv">Printable CV</a> · <a href="play/">Play the game</a> · <a href="#top">Back to top</a></span>
+      <span><a href="cv.html">Printable CV</a> · <a href="#top">Back to top</a></span>
     </div></footer>`);
 }
 
@@ -543,8 +536,8 @@ function initScroll(space) {
       a.push([top(ch), i]);
       a.push([top(ch) + ch.offsetHeight - vh * 1.15, i]);
     });
-    const play = $('#play');
-    if (play) a.push([top(play) - vh * 0.1, N]);
+    const finale = $('#contact');
+    if (finale) a.push([top(finale) - vh * 0.1, N]);
     a.push([document.documentElement.scrollHeight, N]);
     anchors = a.sort((p, q) => p[0] - q[0]);
   }
@@ -649,7 +642,7 @@ function initScroll(space) {
     start: 'top 86%',
     onEnter: (els) => gsap.fromTo(els, { y: 50, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.1, ease: 'power3.out', stagger: 0.09, overwrite: true }),
   });
-  gsap.from('.play h2', { scale: 0.8, ease: 'none', scrollTrigger: { trigger: '.play', start: 'top bottom', end: 'center center', scrub: true } });
+  gsap.from('.contact h2', { scale: 0.8, ease: 'none', scrollTrigger: { trigger: '.contact', start: 'top bottom', end: 'center center', scrub: true } });
 
   // Fonts can change heights: recompute everything once they're ready
   document.fonts && document.fonts.ready.then(() => ScrollTrigger.refresh());

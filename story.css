@@ -183,17 +183,13 @@ main { position: relative; z-index: 2; }
 .skill-card { padding: 28px; }
 .skill-card h3 { margin: 0 0 16px; font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
 
-/* ---------- Play + contact ---------- */
-.play, .contact { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 14vh 22px; }
-.play h2, .contact h2 {
+/* ---------- Contact (finale) ---------- */
+.contact { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 14vh 22px; }
+.contact h2 {
   font-size: clamp(56px, 10vw, 148px); font-weight: 800; letter-spacing: -0.055em; line-height: 0.98; margin: 0 0 22px;
 }
-.play h2 { background: linear-gradient(180deg, #fff7d6, #fbbf24 55%, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.play p, .play .eyebrow, .contact p { text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85); }
-.play p { color: var(--ink-2); }
-.play p, .contact p { font-size: clamp(19px, 2vw, 24px); color: var(--muted); margin: 0 0 34px; max-width: 640px; line-height: 1.4; }
-.btn.big { font-size: 19px; padding: 16px 34px; }
-.btn.glow { box-shadow: 0 0 50px rgba(10, 132, 255, 0.55); }
+.contact h2 { background: linear-gradient(180deg, #fff7d6, #fbbf24 55%, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.contact p { text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85); color: var(--ink-2); font-size: clamp(19px, 2vw, 24px); margin: 0 0 34px; max-width: 640px; line-height: 1.4; }
 .contact-links { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
 .contact .meta { font-size: 15px; color: var(--faint); margin-top: 30px; }
 

@@ -7,7 +7,7 @@
 //    headline→ big chapter headline on the story page
 //    color   → planet colour (optional)
 //    logo    → logo file path, or a list of paths (optional; shown unmodified on a white badge)
-//    skills  → become collectible crystals orbiting that planet
+//    skills  → skill chips shown in that chapter
 // =====================================================================
 window.CV = {
   name: "Mayank Singh Kunwar",
