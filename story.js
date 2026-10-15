@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createGame } from './game3d.js';
 
 const CV = window.CV;
 const { gsap, ScrollTrigger } = window;
@@ -63,7 +64,7 @@ function render() {
         <p class="hero-sub">${esc(CV.tagline || '')}</p>
         <div class="hero-cta">
           <a class="btn primary" href="#journey">Start the journey</a>
-          <a class="btn ghost" href="cv.html">View CV ›</a>
+          <a class="btn ghost" href="#fly" data-fly>Fly it yourself ›</a>
         </div>
         <div class="scroll-cue">Scroll</div>
       </div>
@@ -95,7 +96,7 @@ function render() {
     <section class="contact" id="contact">
       <h2 data-reveal>Let’s talk.</h2>
       <p data-reveal>${esc(c.location || '')}${CV.rightToWork ? ' · ' + esc(CV.rightToWork) : ''}</p>
-      <div class="contact-links" data-reveal>${links}<a class="btn light" href="cv.html">Printable CV</a></div>
+      <div class="contact-links" data-reveal>${links}<a class="btn light" href="cv.html">Printable CV</a><a class="btn light" href="#fly" data-fly>Fly through it</a></div>
     </section>`;
 
   document.body.insertAdjacentHTML('beforeend', `
@@ -462,7 +463,7 @@ function initSpace() {
   }
   addEventListener('resize', resize);
 
-  let last = performance.now(), first = true;
+  let last = performance.now(), first = true, game = null;
   const schedule = CAPTURE ? (f) => setTimeout(() => f(performance.now()), 16) : requestAnimationFrame;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -472,10 +473,17 @@ function initSpace() {
     mouse.sx += (mouse.x - mouse.sx) * (1 - Math.exp(-dt * 3));
     mouse.sy += (mouse.y - mouse.sy) * (1 - Math.exp(-dt * 3));
     const { pos, look } = solve(Math.max(-1, Math.min(N, camT)));
-    camPos.copy(pos).add(new THREE.Vector3(mouse.sx * 1.6, -mouse.sy * 1.0, 0));
+    const g = game && game.update(dt, time);      // free-flight mode hands back a camera pose + blend
+    const b = g ? g.blend : 0;
+    camPos.copy(pos).add(new THREE.Vector3(mouse.sx * 1.6 * (1 - b), -mouse.sy * 1.0 * (1 - b), 0));
     camLook.copy(look);
+    if (g) { camPos.lerp(g.pos, b); camLook.lerp(g.look, b); }
     camera.position.copy(camPos);
     camera.lookAt(camLook);
+    const fov = g ? 40 + (g.fov - 40) * b : 40;
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.updateMatrixWorld();
+    if (game) game.afterCamera();
 
     uniformsWithTime.forEach((u) => (u.uTime.value = time));
     sunU.uTime.value = time;
@@ -490,7 +498,7 @@ function initSpace() {
   }
   schedule(frame);
 
-  return { setTarget: (t) => (targetT = t), N };
+  return { setTarget: (t) => (targetT = t), N, scene, camera, renderer, bodies, centers, sunC, sunR: 6, LIGHT, setGame: (gm) => (game = gm) };
 }
 
 // ====================================================================
@@ -500,6 +508,11 @@ function initScroll(space) {
   const haveGsap = gsap && ScrollTrigger;
   if (haveGsap) gsap.registerPlugin(ScrollTrigger);
   if (CAPTURE && haveGsap) gsap.ticker.lagSmoothing(0);   // slow software-rendered frames must not stall the timelines
+  let lenisRef = null;
+  const api = {
+    lock: () => { lenisRef && lenisRef.stop(); document.documentElement.classList.add('fly-lock'); },
+    unlock: () => { lenisRef && lenisRef.start(); document.documentElement.classList.remove('fly-lock'); },
+  };
 
   // Smooth scrolling (skipped for reduced motion and headless capture)
   let lenis = null;
@@ -508,8 +521,9 @@ function initScroll(space) {
     lenis.on('scroll', ScrollTrigger.update);
     gsap.ticker.add((t) => lenis.raf(t * 1000));
     gsap.ticker.lagSmoothing(0);
+    lenisRef = lenis;
   }
-  $$('a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
+  $$('a[href^="#"]:not([data-fly])').forEach((a) => a.addEventListener('click', (e) => {
     const target = $(a.getAttribute('href'));
     if (!target) return;
     e.preventDefault();
@@ -561,7 +575,7 @@ function initScroll(space) {
   addEventListener('resize', () => { computeAnchors(); onScroll(); });
   onScroll();
 
-  if (!haveGsap) return;
+  if (!haveGsap) return api;
   ScrollTrigger.addEventListener('refresh', () => { computeAnchors(); onScroll(); });
 
   // Active nav link
@@ -570,7 +584,7 @@ function initScroll(space) {
     if (el && link) ScrollTrigger.create({ trigger: el, start: 'top 55%', end: 'bottom 55%', toggleClass: { targets: link, className: 'active' } });
   });
 
-  if (REDUCED) return;   // content stays fully visible, no scroll-scrubbed motion
+  if (REDUCED) return api;   // content stays fully visible, no scroll-scrubbed motion
 
   // Hero entrance + exit
   gsap.from('.hero h1 .w > span', { yPercent: 110, duration: 1.5, ease: 'expo.out', stagger: 0.09, delay: 0.25 });
@@ -646,8 +660,21 @@ function initScroll(space) {
 
   // Fonts can change heights: recompute everything once they're ready
   document.fonts && document.fonts.ready.then(() => ScrollTrigger.refresh());
+  return api;
 }
 
 render();
 const space = initSpace();
-initScroll(space);
+const scrollApi = initScroll(space);
+if (space) {
+  const game = createGame({
+    ...space, CV, STAGES, colorOf, logosOf, reduced: REDUCED,
+    typeLabel: (st) => TYPE_LABEL[st.type] || 'Experience',
+    hooks: { onEnter: scrollApi.lock, onExit: scrollApi.unlock },
+  });
+  space.setGame(game);
+  $$('[data-fly]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); a.blur(); game.enter(); }));
+  if (location.hash === '#fly') setTimeout(() => game.enter(), 700);
+} else {
+  $$('[data-fly]').forEach((a) => a.remove());   // no WebGL, no flight
+}

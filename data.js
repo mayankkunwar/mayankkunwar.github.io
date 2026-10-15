@@ -1,9 +1,9 @@
 // =====================================================================
-//  ✏️  ALL CV CONTENT LIVES HERE — the game builds itself from this file.
+//  ✏️  ALL CV CONTENT LIVES HERE. The site builds itself from this file.
 //
 //  stages[]  → one level section each, in chronological order (oldest first).
 //    type    → "education" (ringed planet), "work" (gas giant), "project" (moon)
-//              or "toolkit" (space station — its card shows skillGroups)
+//              or "toolkit" (space station; its card shows skillGroups)
 //    headline→ big chapter headline on the story page
 //    color   → planet colour (optional)
 //    logo    → logo file path, or a list of paths (optional; shown unmodified on a white badge)
@@ -155,8 +155,8 @@ window.CV = {
 
   // ---------------- Story page (index.html) ----------------
   statement:
-    "8+ years designing distributed systems that stay fast under pressure — at Siemens, Red Hat and Cloudera, " +
-    "and now in research with IBM at Newcastle University.",
+    "I've spent 8+ years building distributed systems that stay fast under pressure at Siemens, Red Hat and Cloudera. " +
+    "Now I'm researching storage performance with IBM at Newcastle University.",
 
   stats: [
     { value: 8, suffix: "+", label: "years building backend systems" },
